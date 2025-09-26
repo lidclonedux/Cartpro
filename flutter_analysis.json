@@ -1,0 +1,23 @@
+{
+  "analysis_timestamp": "2025-09-04T23:34:34-03:00",
+  "summary": {
+    "models_count": 4,
+    "providers_count": 5,
+    "services_count": 1,
+    "screens_count": 7,
+    "errors_count": 0
+  },
+  "files": {
+    "models": ["cart_item.dart","order.dart","product.dart","user.dart"],
+    "providers": ["auth_provider.dart","cart_provider.dart","order_provider.dart","product_provider.dart","user_provider.dart"],
+    "services": ["api_service.dart"],
+    "screens": ["admin_screen.dart","cart_screen.dart","home_screen.dart","login_screen.dart","products_screen.dart","profile_screen.dart","splash_screen.dart"]
+  },
+  "errors": [""],
+  "recommendations": [
+    "Fix import conflicts",
+    "Implement missing provider methods",
+    "Update API service signatures",
+    "Add missing model fields"
+  ]
+}

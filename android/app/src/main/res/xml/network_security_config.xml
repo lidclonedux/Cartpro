@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+    ================================================================================
+    CONFIGURAÇÃO DE SEGURANÇA DE REDE CORRIGIDA PARA FLUTTER RELEASE
+    ================================================================================
+    PROBLEMA IDENTIFICADO: A configuração anterior forçava HTTPS apenas no release,
+    causando falha na conexão com o Render.
+    SOLUÇÃO: Configuração específica para o domínio do Render.
+    -->
+
+    <!--
+    Configuração para builds de DEBUG.
+    Permite HTTP para desenvolvimento local (localhost, 10.0.2.2, etc.)
+    -->
+    <debug-overrides>
+        <base-config cleartextTrafficPermitted="true">
+            <trust-anchors>
+                <certificates src="system" />
+                <certificates src="user" />
+            </trust-anchors>
+        </base-config>
+    </debug-overrides>
+
+    <!--
+    Configuração PADRÃO para RELEASE
+    MUDANÇA: cleartextTrafficPermitted="true" temporariamente para debug
+    DEPOIS DE FUNCIONAR: mude para "false" para segurança
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+    CONFIGURAÇÃO ESPECÍFICA PARA SEU DOMÍNIO RENDER
+    Garante que conexões HTTPS funcionem corretamente
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">painel-lucasbeats.onrender.com</domain>
+        <trust-anchors>
+            <!-- Confia em certificados do sistema (incluindo Let's Encrypt usado pelo Render) -->
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!--
+    DOMÍNIOS ADICIONAIS PARA TESTE (remova se não usar)
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+
+</network-security-config>

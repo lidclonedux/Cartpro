@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "753481854109",
+    "project_id": "ecomerce-apks",
+    "storage_bucket": "ecomerce-apks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:753481854109:android:5932b5037a7e7b2327f874",
+        "android_client_info": {
+          "package_name": "com.vitrine_borracharia.vitrine"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgGuWVSx4NULMr1zf4LYia1qcKD7ww28Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
