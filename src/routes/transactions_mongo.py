@@ -1,5 +1,6 @@
 # ARQUIVO CORRIGIDO E SEGURO: src/routes/transactions_mongo.py
 # $SAGRADO
+# MODIFICAÇÃO: Unifica a distribuição de receitas e despesas para um único gráfico de pizza.
 
 from flask import Blueprint, request, jsonify
 from models.transaction_mongo import Transaction
@@ -13,7 +14,7 @@ import re
 transactions_bp = Blueprint('transactions', __name__)
 
 # ==================================================================
-# === ROTAS CRUD DE TRANSAÇÕES (COM CORREÇÃO DE DATA) ===
+# === ROTAS CRUD DE TRANSAÇÕES (CÓDIGO ORIGINAL PRESERVADO) ===
 # ==================================================================
 
 @transactions_bp.route('/api/transactions', methods=['GET'])
@@ -191,13 +192,12 @@ def get_dashboard_summary(current_user_uid, current_user_data):
     }
 
 # ==================================================================
-# === NOVA ROTA DE DASHBOARD COMPLETO ===
+# === ROTA DE DASHBOARD COMPLETO (MODIFICADA) ===
 # ==================================================================
 
 @transactions_bp.route('/api/dashboard/full-summary', methods=['GET'])
 @verify_token
 def get_full_dashboard_summary(current_user_uid, current_user_data, *args, **kwargs): # <-- CORREÇÃO DE ASSINATURA
-    # ... (código original)
     try:
         context = request.args.get('context', 'business')
         now = datetime.now()
@@ -229,21 +229,6 @@ def get_full_dashboard_summary(current_user_uid, current_user_data, *args, **kwa
         current_month_start = datetime(now.year, now.month, 1)
         current_month_end = current_month_start + relativedelta(months=1)
         
-        expense_filters = {
-            'user_id': current_user_uid,
-            'context': context,
-            'type': 'expense',
-            'date': {'$gte': current_month_start, '$lt': current_month_end}
-        }
-        month_expense_transactions = Transaction.find_all(expense_filters)
-
-        expense_categories = {}
-        for t in month_expense_transactions:
-            category_name = t.to_dict().get('category_name', 'Sem Categoria')
-            expense_categories[category_name] = expense_categories.get(category_name, 0) + t.amount
-        
-        expense_distribution = [{'category_name': name, 'total': value} for name, value in expense_categories.items()]
-
         all_transactions_in_period_filters = {
             'user_id': current_user_uid,
             'context': context,
@@ -251,13 +236,40 @@ def get_full_dashboard_summary(current_user_uid, current_user_data, *args, **kwa
         }
         all_transactions_in_period = Transaction.find_all(all_transactions_in_period_filters)
         
+        # --- INÍCIO DA MODIFICAÇÃO ---
+        # 1. Agrupar TODAS as transações (receitas e despesas) por categoria
+        
+        cash_flow_by_category = {}
+        for t in all_transactions_in_period:
+            # Usamos o to_dict() para pegar o category_name que já é resolvido no modelo
+            category_name = t.to_dict().get('category_name', 'Sem Categoria')
+            
+            # Inicializa a estrutura para uma nova categoria
+            if category_name not in cash_flow_by_category:
+                cash_flow_by_category[category_name] = {'amount': 0, 'type': t.type}
+            
+            # Soma o valor da transação ao total da categoria
+            cash_flow_by_category[category_name]['amount'] += t.amount
+
+        # 2. Formatar a saída para a API em uma lista unificada
+        cash_flow_distribution = [
+            {
+                'category_name': name,
+                'total': data['amount'],
+                'type': data['type'] # Mantemos o tipo para o frontend poder diferenciar as cores
+            } 
+            for name, data in cash_flow_by_category.items()
+        ]
+        
+        # --- FIM DA MODIFICAÇÃO ---
+        
         transaction_count = len(all_transactions_in_period)
         avg_transaction_value = (summary_data['total_income'] + summary_data['total_expenses']) / transaction_count if transaction_count > 0 else 0
 
         full_summary = {
             **summary_data,
             'monthly_trend': monthly_trend,
-            'expense_categories': expense_distribution,
+            'cash_flow_distribution': cash_flow_distribution, # <<< CAMPO UNIFICADO
             'transaction_count': transaction_count,
             'avg_transaction_value': avg_transaction_value,
             'cash_flow_trend': 'stable',
