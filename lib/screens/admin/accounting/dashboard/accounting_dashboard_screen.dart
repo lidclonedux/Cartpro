@@ -1,6 +1,7 @@
 // lib/screens/admin/accounting/dashboard/accounting_dashboard_screen.dart
 // Dashboard com gráficos corrigidos e funcionais
 // $SAGRADO
+// MODIFICAÇÃO: Unifica o gráfico de pizza para mostrar Receitas e Despesas juntas.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -160,13 +161,18 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
                   const SizedBox(height: 16),
                   _buildMonthlyCashFlowChart(summary),
                   const SizedBox(height: 24),
+                  
+                  // --- INÍCIO DA MODIFICAÇÃO ---
                   _buildSectionHeader(
-                    'Distribuição de Despesas',
-                    'Por categoria no mês atual',
+                    'Composição do Fluxo de Caixa', // Título alterado
+                    'Receitas e Despesas do mês atual', // Subtítulo alterado
                     Icons.pie_chart,
                   ),
                   const SizedBox(height: 16),
-                  _buildExpenseDistributionChart(summary),
+                  // Chamada para o novo gráfico unificado
+                  _buildUnifiedCashFlowChart(summary),
+                  // --- FIM DA MODIFICAÇÃO ---
+
                   const SizedBox(height: 24),
                   _buildSectionHeader(
                     'Resumo do Período',
@@ -345,7 +351,6 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
   }
 
   Widget _buildMonthlyCashFlowChart(Map<String, dynamic> summary) {
-    // Consome os dados reais do backend vindos do provider
     final List<dynamic> monthlyData = summary['monthly_trend'] as List<dynamic>? ?? [];
 
     if (monthlyData.isEmpty) {
@@ -353,7 +358,7 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
     }
 
     List<BarChartGroupData> barGroups = [];
-    double maxY = 100; // Valor mínimo
+    double maxY = 100;
 
     for (int i = 0; i < monthlyData.length; i++) {
       final month = monthlyData[i];
@@ -419,7 +424,6 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipColor: (group) => const Color(0xFF36393F),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                        // Usa o nome do mês vindo dos dados reais
                         String month = monthlyData[group.x]['month'];
                         String type = rodIndex == 0 ? 'Receitas' : 'Despesas';
                         return BarTooltipItem(
@@ -446,7 +450,6 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
-                          // Usa o nome do mês vindo dos dados reais
                           return SideTitleWidget(
                             axisSide: meta.axisSide,
                             child: Text(
@@ -513,41 +516,59 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
     );
   }
 
-  Widget _buildExpenseDistributionChart(Map<String, dynamic> summary) {
-    // Consome os dados reais do backend
-    final List<dynamic> expenses = summary['expense_categories'] as List<dynamic>? ?? [];
+  // --- INÍCIO DA MODIFICAÇÃO ---
+  // O método `_buildExpenseDistributionChart` foi substituído por `_buildUnifiedCashFlowChart`.
+
+  /// Constrói o gráfico de pizza UNIFICADO para Receitas e Despesas.
+  Widget _buildUnifiedCashFlowChart(Map<String, dynamic> summary) {
+    // Consome os dados unificados do provider
+    final List<dynamic> cashFlowData = context.read<AccountingProvider>().cashFlowDistribution;
     
-    if (expenses.isEmpty) {
-      return _buildNoDataCard('Nenhuma despesa encontrada neste período');
+    if (cashFlowData.isEmpty) {
+      return _buildNoDataCard('Nenhuma movimentação encontrada neste período');
     }
 
     List<PieChartSectionData> sections = [];
-    List<Color> colors = [
-      Colors.red, Colors.orange, Colors.yellow, Colors.purple,
-      Colors.blue, Colors.teal, Colors.pink, Colors.indigo,
-    ];
+    
+    // Paletas de cores distintas para receitas e despesas
+    List<Color> incomeColors = [Colors.green, Colors.blue, Colors.teal, Colors.lightGreen, Colors.cyan];
+    List<Color> expenseColors = [Colors.red, Colors.orange, Colors.purple, Colors.pink, Colors.brown];
+    int incomeColorIndex = 0;
+    int expenseColorIndex = 0;
 
-    double totalExpenses = expenses.fold(0.0, (sum, expense) => sum + (expense['total'] as num).toDouble());
+    // Calcula o valor total absoluto para o cálculo da porcentagem
+    double totalCashFlow = cashFlowData.fold(0.0, (sum, item) => sum + (item['total'] as num).toDouble());
 
-    if (totalExpenses == 0) {
-      return _buildNoDataCard('Nenhuma despesa encontrada neste período');
+    if (totalCashFlow == 0) {
+      return _buildNoDataCard('Nenhuma movimentação encontrada neste período');
     }
     
-    for (int i = 0; i < expenses.length; i++) {
-      final expense = expenses[i];
-      final total = (expense['total'] as num).toDouble();
-      final percentage = (total / totalExpenses * 100);
+    for (int i = 0; i < cashFlowData.length; i++) {
+      final item = cashFlowData[i];
+      final total = (item['total'] as num).toDouble();
+      final type = item['type'] as String;
+      final percentage = (total / totalCashFlow * 100);
+      
+      Color sectionColor;
+      if (type == 'income') {
+        sectionColor = incomeColors[incomeColorIndex % incomeColors.length];
+        incomeColorIndex++;
+      } else {
+        sectionColor = expenseColors[expenseColorIndex % expenseColors.length];
+        expenseColorIndex++;
+      }
       
       sections.add(
         PieChartSectionData(
-          color: colors[i % colors.length],
-          value: total,
-          title: '${percentage.toStringAsFixed(1)}%',
+          color: sectionColor,
+          value: total, // O valor é sempre positivo para o tamanho da fatia
+          title: '${percentage.toStringAsFixed(0)}%', // Porcentagem em relação ao todo
           radius: touchedPieIndex == i ? 80 : 70,
           titleStyle: const TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
             color: Colors.white,
+            shadows: [Shadow(color: Colors.black, blurRadius: 2)],
           ),
         ),
       );
@@ -562,12 +583,12 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
         child: Column(
           children: [
             SizedBox(
-              height: 200,
+              height: 250,
               child: PieChart(
                 PieChartData(
                   sections: sections,
-                  centerSpaceRadius: 40,
-                  sectionsSpace: 2,
+                  centerSpaceRadius: 50,
+                  sectionsSpace: 3,
                   pieTouchData: PieTouchData(
                     touchCallback: (FlTouchEvent event, pieTouchResponse) {
                       setState(() {
@@ -584,17 +605,27 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
+            // Legenda unificada
             Wrap(
               spacing: 16,
               runSpacing: 8,
-              children: List.generate(expenses.length, (index) {
-                final expense = expenses[index];
+              alignment: WrapAlignment.center,
+              children: List.generate(cashFlowData.length, (index) {
+                final item = cashFlowData[index];
+                final type = item['type'] as String;
+                
+                Color legendColor;
+                if (type == 'income') {
+                  legendColor = incomeColors[(incomeColors.length - (incomeColorIndex--)) % incomeColors.length];
+                } else {
+                  legendColor = expenseColors[(expenseColors.length - (expenseColorIndex--)) % expenseColors.length];
+                }
+
                 return _buildLegendItem(
-                  // Usa o nome da categoria vindo do backend
-                  expense['category_name'] ?? 'Categoria ${index + 1}',
-                  colors[index % colors.length],
-                  value: _formatCurrency((expense['total'] as num).toDouble()),
+                  item['category_name'] ?? 'Categoria ${index + 1}',
+                  legendColor,
+                  value: _formatCurrency((item['total'] as num).toDouble()),
                 );
               }),
             ),
@@ -603,6 +634,7 @@ class _AccountingDashboardScreenState extends State<AccountingDashboardScreen> {
       ),
     );
   }
+  // --- FIM DA MODIFICAÇÃO ---
 
   Widget _buildDetailedStats(Map<String, dynamic> summary) {
     final avgTransactionValue = (summary['avg_transaction_value'] as num?)?.toDouble() ?? 0.0;

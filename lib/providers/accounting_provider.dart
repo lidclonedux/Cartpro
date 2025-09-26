@@ -1,3 +1,6 @@
+// lib/providers/accounting_provider.dart
+// MODIFICAÇÃO: Ajustado para consumir a nova estrutura de dados unificada 'cash_flow_distribution'.
+
 import 'dart:typed_data'; // <<< ADICIONADO para suportar bytes do arquivo
 import 'package:flutter/material.dart';
 import 'package:vitrine_borracharia/services/api_service.dart';
@@ -52,9 +55,21 @@ class AccountingProvider with ChangeNotifier {
   int get pendingPayments => _dashboardSummary?['pending_payments'] ?? 0;
   int get upcomingReceivables => _dashboardSummary?['upcoming_receivables'] ?? 0;
   
+  // --- INÍCIO DA MODIFICAÇÃO ---
+  
   // Getters para dados de gráficos
   List<dynamic> get monthlyTrend => _dashboardSummary?['monthly_trend'] ?? [];
-  List<dynamic> get expenseCategories => _dashboardSummary?['expense_categories'] ?? [];
+  
+  // NOVO GETTER UNIFICADO: Retorna a lista completa para o gráfico de pizza.
+  List<dynamic> get cashFlowDistribution => _dashboardSummary?['cash_flow_distribution'] ?? [];
+
+  // Getter antigo (marcado como obsoleto para referência, pode ser removido depois)
+  @Deprecated('Use cashFlowDistribution e filtre por tipo, se necessário. Será removido em breve.')
+  List<dynamic> get expenseCategories => (_dashboardSummary?['cash_flow_distribution'] as List<dynamic>?)
+      ?.where((item) => item['type'] == 'expense')
+      .toList() ?? [];
+
+  // --- FIM DA MODIFICAÇÃO ---
 
   // =======================================================================
   // === PRÉ-CARREGAMENTO INTELIGENTE ===
@@ -103,7 +118,8 @@ class AccountingProvider with ChangeNotifier {
     try {
       final Map<String, dynamic> summaryData = await _accountingApiService.getDashboardSummary();
       
-      // Garantir que todos os campos esperados pela UI existam
+      // --- INÍCIO DA MODIFICAÇÃO ---
+      // Garantir que todos os campos esperados pela UI existam, incluindo o novo campo unificado.
       _dashboardSummary = {
         'balance': (summaryData['balance'] as num?)?.toDouble() ?? 0.0,
         'total_income': (summaryData['total_income'] as num?)?.toDouble() ?? 0.0,
@@ -113,8 +129,7 @@ class AccountingProvider with ChangeNotifier {
         
         // Campos para os gráficos
         'monthly_trend': (summaryData['monthly_trend'] as List<dynamic>?) ?? [],
-        'expense_categories': (summaryData['expense_distribution'] as List<dynamic>?) ?? 
-                             (summaryData['expense_categories'] as List<dynamic>?) ?? [],
+        'cash_flow_distribution': (summaryData['cash_flow_distribution'] as List<dynamic>?) ?? [], // <<< CAMPO UNIFICADO
         
         // Métricas adicionais
         'avg_transaction_value': (summaryData['avg_transaction_value'] as num?)?.toDouble() ?? 0.0,
@@ -122,6 +137,7 @@ class AccountingProvider with ChangeNotifier {
         'cash_flow_trend': summaryData['cash_flow_trend'] as String? ?? 'stable',
         'monthly_growth': (summaryData['monthly_growth'] as num?)?.toDouble() ?? 0.0,
       };
+      // --- FIM DA MODIFICAÇÃO ---
 
       Logger.info('$logPrefix ✅ Resumo do dashboard carregado com sucesso.');
       Logger.debug('$logPrefix Dados do Resumo: Saldo R\$${_dashboardSummary?['balance']}');
