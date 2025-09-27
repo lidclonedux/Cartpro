@@ -1,7 +1,7 @@
 // lib/providers/accounting_provider.dart
 // MODIFICAÇÃO: Ajustado para consumir a nova estrutura de dados unificada 'cash_flow_distribution'.
 
-import 'dart:typed_data'; // <<< ADICIONADO para suportar bytes do arquivo
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:vitrine_borracharia/services/api_service.dart';
 import 'package:vitrine_borracharia/utils/logger.dart';
@@ -64,7 +64,7 @@ class AccountingProvider with ChangeNotifier {
   List<dynamic> get cashFlowDistribution => _dashboardSummary?['cash_flow_distribution'] ?? [];
 
   // Getter antigo (marcado como obsoleto para referência, pode ser removido depois)
-  @Deprecated('Use cashFlowDistribution e filtre por tipo, se necessário. Será removido em breve.')
+  @Deprecated('Use cashFlowDistribution. Este getter será removido em futuras versões.')
   List<dynamic> get expenseCategories => (_dashboardSummary?['cash_flow_distribution'] as List<dynamic>?)
       ?.where((item) => item['type'] == 'expense')
       .toList() ?? [];
@@ -75,8 +75,6 @@ class AccountingProvider with ChangeNotifier {
   // === PRÉ-CARREGAMENTO INTELIGENTE ===
   // =======================================================================
   
-  /// Inicia o carregamento dos dados essenciais de contabilidade em segundo plano.
-  /// Não define `isLoading` para não mostrar spinners na UI principal.
   Future<void> preloadAccountingData() async {
     if (_isPreloading) {
       Logger.info('📊 [ACC_PROVIDER] Pré-carregamento já em andamento. Ignorando nova chamada.');
@@ -86,7 +84,6 @@ class AccountingProvider with ChangeNotifier {
     Logger.info('📊 [ACC_PROVIDER] Iniciando pré-carregamento de dados contábeis em segundo plano...');
     _isPreloading = true;
     
-    // Buscar tudo em paralelo para otimizar o tempo
     await Future.wait([
       fetchDashboardSummary(isPreload: true),
       fetchAccountingCategories(isPreload: true),
@@ -102,8 +99,6 @@ class AccountingProvider with ChangeNotifier {
   // === DASHBOARD SUMMARY ===
   // =======================================================================
 
-  /// Busca o resumo do dashboard.
-  /// O parâmetro `isPreload` controla se a UI deve mostrar um indicador de carregamento.
   Future<void> fetchDashboardSummary({bool isPreload = false}) async {
     final logPrefix = isPreload ? '📊 [PRELOAD]' : '📈 [FETCH]';
     Logger.info('$logPrefix Iniciando busca do Resumo do Dashboard...');
@@ -157,7 +152,6 @@ class AccountingProvider with ChangeNotifier {
   // === CATEGORIAS DE CONTABILIDADE ===
   // =======================================================================
 
-  /// Busca as categorias de contabilidade.
   Future<void> fetchAccountingCategories({bool isPreload = false}) async {
     final logPrefix = isPreload ? '📊 [PRELOAD]' : '📂 [FETCH]';
     Logger.info('$logPrefix Iniciando busca das Categorias Contábeis...');
@@ -183,7 +177,6 @@ class AccountingProvider with ChangeNotifier {
     }
   }
 
-  // Alias para compatibilidade
   Future<void> fetchCategories() async {
     return fetchAccountingCategories();
   }
@@ -201,14 +194,13 @@ class AccountingProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = 'Erro ao criar categoria de contabilidade: ${e.toString()}';
       Logger.error('AccountingProvider: $_errorMessage', error: e);
-      rethrow; // Re-propagar erro para que a UI possa tratá-lo
+      rethrow;
     } finally {
       _isLoadingCategories = false;
       notifyListeners();
     }
   }
 
-  // Método simplificado para criação rápida
   Future<void> addCategory(String name, {String type = 'expense'}) async {
     final category = AccountingCategory(
       id: '',
@@ -242,7 +234,6 @@ class AccountingProvider with ChangeNotifier {
     }
   }
 
-  // Método simplificado para atualização
   Future<void> updateCategory(String categoryId, String name) async {
     final category = _categories.firstWhere((c) => c.id == categoryId);
     final updatedCategory = category.copyWith(name: name);
@@ -268,7 +259,6 @@ class AccountingProvider with ChangeNotifier {
     }
   }
 
-  // Alias para compatibilidade
   Future<void> deleteCategory(String categoryId) async {
     return deleteAccountingCategory(categoryId);
   }
@@ -277,7 +267,6 @@ class AccountingProvider with ChangeNotifier {
   // === TRANSAÇÕES RECORRENTES ===
   // =======================================================================
 
-  /// Busca as transações recorrentes.
   Future<void> fetchRecurringTransactions({bool isPreload = false}) async {
     final logPrefix = isPreload ? '📊 [PRELOAD]' : '🔁 [FETCH]';
     Logger.info('$logPrefix Iniciando busca de Transações Recorrentes...');
@@ -323,7 +312,6 @@ class AccountingProvider with ChangeNotifier {
     }
   }
 
-  // Método com todos os parâmetros necessários
   Future<void> addRecurringTransaction(
     String description,
     double amount,
@@ -388,7 +376,6 @@ class AccountingProvider with ChangeNotifier {
   // === PROCESSAMENTO DE DOCUMENTOS (IMPORTAÇÃO) ===
   // =======================================================================
 
-  // <<< CORREÇÃO: Novo método `processDocument` adicionado >>>
   Future<Map<String, dynamic>> processDocument({
     String? filePath,
     Uint8List? fileBytes,
@@ -400,7 +387,6 @@ class AccountingProvider with ChangeNotifier {
     _errorMessage = null;
 
     try {
-      // Chama o método da camada de serviço da API, passando os dados do arquivo
       final Map<String, dynamic> result = await _accountingApiService.processDocument(
         filePath: filePath,
         fileBytes: fileBytes,
@@ -411,7 +397,6 @@ class AccountingProvider with ChangeNotifier {
       if (result['success'] == true) {
         Logger.info('$logPrefix ✅ Documento processado com sucesso pela API.');
         Logger.debug('$logPrefix Resposta da API: $result');
-        // Retorna o resultado completo para a UI (AdminImportScreen)
         return result;
       } else {
         final error = result['error'] ?? 'Erro desconhecido retornado pela API.';
@@ -430,7 +415,6 @@ class AccountingProvider with ChangeNotifier {
   // === MÉTODOS UTILITÁRIOS ===
   // =======================================================================
 
-  /// Limpa todos os dados armazenados
   void clearAllData() {
     _dashboardSummary = null;
     _categories = [];
@@ -443,7 +427,6 @@ class AccountingProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Busca categoria por ID
   AccountingCategory? getCategoryById(String categoryId) {
     try {
       return _categories.firstWhere((c) => c.id == categoryId);
@@ -453,12 +436,10 @@ class AccountingProvider with ChangeNotifier {
     }
   }
 
-  /// Filtra categorias por tipo
   List<AccountingCategory> getCategoriesByType(String type) {
     return _categories.where((c) => c.type == type).toList();
   }
 
-  /// Verifica se há dados carregados
   bool get hasData {
     return _dashboardSummary != null || _categories.isNotEmpty || _recurringTransactions.isNotEmpty;
   }
