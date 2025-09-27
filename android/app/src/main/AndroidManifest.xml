@@ -66,6 +66,14 @@
             </intent-filter>
         </activity>
             
+        <!-- =================== INÍCIO DA CORREÇÃO =================== -->
+        <!-- Esta tag garante a compatibilidade com plugins que usam a API antiga (v1). -->
+        <!-- Ela deve estar dentro do bloco <application>. -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <!-- ==================== FIM DA CORREÇÃO ===================== -->
+
         <!-- File Provider para compartilhamento seguro de arquivos -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -77,9 +85,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
     </application>
         
     <!-- Queries para visibilidade de pacotes (Android 11+) -->
