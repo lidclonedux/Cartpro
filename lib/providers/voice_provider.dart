@@ -1,12 +1,12 @@
+// <<< ALTERAÇÃO: A linha de import foi comentada, não deletada. >>>
+// import 'package:speech_to_text/speech_to_text.dart'
+//     if (dart.library.html) 'package:vitrine_borracharia/services/web_speech_api.dart';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:vitrine_borracharia/models/accounting_category.dart';
 import 'package:vitrine_borracharia/services/voice_nlp_processor.dart';
 import 'package:vitrine_borracharia/utils/logger.dart';
-
-// Importações condicionais para Web e Mobile
-import 'package:speech_to_text/speech_to_text.dart'
-    if (dart.library.html) 'package:vitrine_borracharia/services/web_speech_api.dart';
 
 enum VoiceState {
   idle,
@@ -33,6 +33,7 @@ class VoiceProvider with ChangeNotifier {
   // <<< `_speechToText` é dinâmico para aceitar ambas as implementações >>>
   dynamic _speechToText;
   late VoiceNlpProcessor _nlpProcessor;
+  // <<< ALTERAÇÃO: Forçado para 'false' para desativar a funcionalidade. >>>
   bool _speechAvailable = false;
 
   VoiceState _currentState = VoiceState.idle;
@@ -66,13 +67,15 @@ class VoiceProvider with ChangeNotifier {
 
   VoiceProvider() {
     _nlpProcessor = VoiceNlpProcessor();
-    _initializeSpeechToText();
-    Logger.info('VoiceProvider: Inicializado');
+    // <<< ALTERAÇÃO: A inicialização do speech-to-text foi desativada. >>>
+    // _initializeSpeechToText();
+    Logger.info('VoiceProvider: Inicializado (Funcionalidade de Voz DESATIVADA)');
   }
 
-  // <<< Lógica de inicialização para Web e Mobile com logs detalhados >>>
+  // <<< ALTERAÇÃO: O corpo da função foi comentado, não deletado. >>>
   Future<void> _initializeSpeechToText() async {
-    Logger.info('VoiceProvider: [1/3] Tentando inicializar SpeechToText...');
+    Logger.info('VoiceProvider: [1/3] Tentando inicializar SpeechToText... (DESATIVADO)');
+    /*
     try {
       // Cria a instância correta para a plataforma
       _speechToText = SpeechToText();
@@ -96,12 +99,14 @@ class VoiceProvider with ChangeNotifier {
       notifyListeners();
     }
     Logger.info('VoiceProvider: [3/3] Final da inicialização. Disponível: $_speechAvailable');
+    */
   }
 
-  // <<< CORREÇÃO PRINCIPAL: `startListening` com feedback visual imediato e logs >>>
+  // <<< ALTERAÇÃO: O corpo da função foi comentado, não deletado. >>>
   Future<void> startListening() async {
-    Logger.info('VoiceProvider: [A] `startListening` chamado. Estado atual: $_currentState');
-    
+    Logger.info('VoiceProvider: [A] `startListening` chamado. (DESATIVADO)');
+    _setError('Reconhecimento de voz está temporariamente desativado.');
+    /*
     if (!_speechAvailable) {
       Logger.warning('VoiceProvider: [B] Speech não está disponível. Tentando re-inicializar...');
       await _initializeSpeechToText();
@@ -122,13 +127,9 @@ class VoiceProvider with ChangeNotifier {
       _clearMessages();
       _currentTranscript = '';
       
-      // <<< CORREÇÃO APLICADA AQUI >>>
-      // Muda o estado ANTES de chamar a função assíncrona `listen`.
-      // Isso garante que a UI (animação, cor) reaja instantaneamente ao toque.
       _setState(VoiceState.listening);
       Logger.info('VoiceProvider: [F] Estado alterado para `listening`. UI deve reagir agora.');
 
-      // A chamada `listen` agora funciona para ambas as implementações
       await _speechToText.listen(
         onResult: _handleSpeechResult,
         listenFor: const Duration(seconds: 15),
@@ -142,13 +143,15 @@ class VoiceProvider with ChangeNotifier {
     } catch (e) {
       Logger.error('VoiceProvider: [H] ❌ Erro ao chamar `listen`', error: e);
       _setError('Erro ao iniciar escuta: ${e.toString()}');
-      // Se der erro, volta pro estado idle para permitir nova tentativa
       _setState(VoiceState.idle);
     }
+    */
   }
 
-  // <<< `stopListening` compatível com Web e Mobile >>>
+  // <<< ALTERAÇÃO: O corpo da função foi comentado, não deletado. >>>
   Future<void> stopListening() async {
+    Logger.info('VoiceProvider: `stopListening` chamado. (DESATIVADO)');
+    /*
     if (_speechToText != null && _speechAvailable) {
       try {
         await _speechToText.stop();
@@ -157,6 +160,7 @@ class VoiceProvider with ChangeNotifier {
         Logger.warning('VoiceProvider: Erro ao parar escuta: $e');
       }
     }
+    */
 
     if (_currentState == VoiceState.listening) {
       _setState(VoiceState.idle);
@@ -517,6 +521,8 @@ class VoiceProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    // <<< ALTERAÇÃO: O corpo da função foi comentado, não deletado. >>>
+    /*
     if (_speechToText != null && _speechAvailable) {
       try {
         _speechToText.stop();
@@ -525,6 +531,7 @@ class VoiceProvider with ChangeNotifier {
         // Ignore dispose errors
       }
     }
+    */
     super.dispose();
     Logger.info('VoiceProvider: Disposed');
   }
@@ -567,6 +574,9 @@ class VoiceProvider with ChangeNotifier {
   }
 
   Future<void> enableSpeechToText() async {
+    Logger.warning('VoiceProvider: `enableSpeechToText` chamado, mas a funcionalidade está desativada.');
+    // <<< ALTERAÇÃO: O corpo da função foi comentado, não deletado. >>>
+    /*
     if (_speechAvailable) {
       Logger.info('VoiceProvider: Speech já está ativo');
       return;
@@ -579,5 +589,6 @@ class VoiceProvider with ChangeNotifier {
       Logger.error('VoiceProvider: Erro ao ativar speech', error: e);
       _setError('Não foi possível ativar reconhecimento de voz: $e');
     }
+    */
   }
 }
