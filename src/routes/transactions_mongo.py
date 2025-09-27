@@ -1,11 +1,13 @@
 # ARQUIVO CORRIGIDO E SEGURO: src/routes/transactions_mongo.py
 # $SAGRADO
-# MODIFICAÇÃO: Unifica a distribuição de receitas e despesas para um único gráfico de pizza.
+# MODIFICAÇÃO: Adicionada rota de migração para pedidos existentes e correção do cash_flow_distribution.
 
 from flask import Blueprint, request, jsonify
 from models.transaction_mongo import Transaction
 from models.category_mongo import Category
+from models.order_mongo import Order # <<< ADICIONADO: Importar modelo de Pedido
 from auth import verify_token
+from middleware.auth_middleware import owner_only_required # <<< ADICIONADO: Importar decorator de owner
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import calendar
@@ -30,13 +32,13 @@ def get_transactions(current_user_uid, current_user_data, *args, **kwargs): # <-
         status_filter = request.args.get('status')
         search_term = request.args.get('search')
         limit = request.args.get('limit', type=int)
-        
+
         filters = {'user_id': current_user_uid}
-        
+
         if context: filters['context'] = context
         if type_filter: filters['type'] = type_filter
         if status_filter: filters['status'] = status_filter
-            
+
         if search_term:
             regex = re.compile(re.escape(search_term), re.IGNORECASE)
             filters['description'] = regex
@@ -45,7 +47,7 @@ def get_transactions(current_user_uid, current_user_data, *args, **kwargs): # <-
             start_date = datetime(int(year), int(month), 1)
             end_date = datetime(int(year), int(month) + 1, 1) if int(month) < 12 else datetime(int(year) + 1, 1, 1)
             filters['date'] = {'$gte': start_date, '$lt': end_date}
-        
+
         transactions = Transaction.find_all(filters, limit=limit)
         return jsonify([t.to_dict() for t in transactions])
     except Exception as e:
@@ -59,22 +61,22 @@ def create_transaction(current_user_uid, current_user_data, *args, **kwargs): # 
     try:
         data = request.get_json()
         print(f"Received data: {data}")
-        
+
         data['user_id'] = current_user_uid
-        
+
         # ==================================================================
         # === CORREÇÃO APLICADA AQUI (DATA) ===
         # ==================================================================
         # O frontend envia 'YYYY-MM-DDTHH:MM:SS.ms'. Pegamos apenas a parte da data.
         date_string = data['date'].split('T')[0]
         transaction_date = datetime.strptime(date_string, '%Y-%m-%d')
-        
+
         due_date = None
         if data.get('due_date'):
             due_date_string = data['due_date'].split('T')[0]
             due_date = datetime.strptime(due_date_string, '%Y-%m-%d')
         # ==================================================================
-        
+
         transaction = Transaction(
             user_id=current_user_uid,
             description=data['description'],
@@ -88,13 +90,13 @@ def create_transaction(current_user_uid, current_user_data, *args, **kwargs): # 
             is_recurring=data.get('is_recurring', False),
             recurring_day=data.get('recurring_day')
         )
-        
+
         result = transaction.save()
         print(f"Transaction saved successfully: {result._id}")
-        
+
         if transaction.is_recurring and transaction.recurring_day:
             create_next_recurring_transaction(transaction)
-        
+
         return jsonify(transaction.to_dict()), 201
     except Exception as e:
         print(f"Error in create_transaction: {e}")
@@ -108,16 +110,16 @@ def update_transaction(current_user_uid, current_user_data, transaction_id, *arg
         transaction = Transaction.find_by_id(transaction_id)
         if not transaction or transaction.user_id != current_user_uid:
             return jsonify({'error': 'Transaction not found or permission denied'}), 404
-        
+
         data = request.get_json()
-        
+
         transaction.description = data.get('description', transaction.description)
         transaction.amount = float(data.get('amount', transaction.amount))
         transaction.type = data.get('type', transaction.type)
         transaction.context = data.get('context', transaction.context)
         transaction.category_id = data.get('category_id', transaction.category_id)
         transaction.status = data.get('status', transaction.status)
-        
+
         # ==================================================================
         # === CORREÇÃO APLICADA AQUI (DATA) ===
         # ==================================================================
@@ -128,10 +130,10 @@ def update_transaction(current_user_uid, current_user_data, transaction_id, *arg
             due_date_string = data['due_date'].split('T')[0]
             transaction.due_date = datetime.strptime(due_date_string, '%Y-%m-%d')
         # ==================================================================
-        
+
         transaction.updated_at = datetime.utcnow()
         transaction.save()
-        
+
         return jsonify(transaction.to_dict())
     except Exception as e:
         print(f"Error in update_transaction: {e}")
@@ -146,14 +148,122 @@ def delete_transaction(current_user_uid, current_user_data, transaction_id, *arg
         transaction = Transaction.find_by_id(transaction_id)
         if not transaction or transaction.user_id != current_user_uid:
             return jsonify({'error': 'Transaction not found or permission denied'}), 404
-        
+
         transaction.delete()
         return jsonify({'message': 'Transaction deleted successfully'})
     except Exception as e:
         print(f"Error in delete_transaction: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ... (Resto do arquivo sem alterações)
+# --- INÍCIO DA NOVA SEÇÃO DE MIGRAÇÃO ---
+# ==================================================================
+# === ROTA DE MIGRAÇÃO DE PEDIDOS HISTÓRICOS ===
+# ==================================================================
+
+@transactions_bp.route('/api/accounting/migrate-existing-orders', methods=['POST'])
+@owner_only_required # Protegido para ser executado apenas pelo dono
+def migrate_orders_to_transactions(current_user_uid, current_user_data):
+    """
+    Script de uso único para varrer pedidos antigos e criar
+    as transações contábeis correspondentes.
+    """
+    try:
+        print(f"🚀 Iniciando migração de pedidos para transações para o usuário: {current_user_uid}")
+
+        # 1. Obter a categoria de "Vendas" ou criá-la
+        sales_category_name = "Vendas E-commerce"
+        sales_category = Category.find_one_by_name_and_user_id(sales_category_name, current_user_uid, context='business')
+
+        if not sales_category:
+            print(f"⚠️ Categoria '{sales_category_name}' não encontrada. Criando...")
+            sales_category = Category({
+                'name': sales_category_name,
+                'user_id': current_user_uid,
+                'context': 'business',
+                'type': 'income',
+                'color': '#059669',
+                'icon': 'shopping-cart',
+                'emoji': '🛍️'
+            })
+            sales_category.save()
+            print(f"✅ Categoria '{sales_category_name}' criada com ID: {sales_category._id}")
+
+        sales_category_id = str(sales_category._id)
+
+        # 2. Buscar todos os pedidos do usuário que já foram concluídos
+        order_filters = {
+            'user_id': current_user_uid,
+            'status': {'$in': ['confirmed', 'shipped', 'delivered']}
+        }
+        existing_orders = Order.find_all(order_filters)
+
+        if not existing_orders:
+            return jsonify({'status': 'success', 'message': 'Nenhum pedido concluído para migrar.'}), 200
+
+        print(f"🔍 Encontrados {len(existing_orders)} pedidos concluídos para processar.")
+
+        # 3. Iterar sobre os pedidos e criar transações se não existirem
+        created_count = 0
+        skipped_count = 0
+        error_count = 0
+
+        for order in existing_orders:
+            try:
+                order_id_str = str(order._id)
+
+                # 3.1. Verificar se já existe uma transação para este pedido
+                transaction_exists = Transaction.find_all({'order_id': order_id_str, 'user_id': current_user_uid}, limit=1)
+
+                if transaction_exists:
+                    skipped_count += 1
+                    continue
+
+                # 3.2. Criar a nova transação
+                transaction_data = {
+                    'user_id': current_user_uid,
+                    'description': f"Receita da Venda - Pedido #{order_id_str[-6:]}",
+                    'amount': order.total_amount,
+                    'type': 'income',
+                    'context': 'business',
+                    'category_id': sales_category_id,
+                    'date': order.updated_at,  # Usa a data da última atualização do pedido como data da transação
+                    'status': 'paid',
+                    'order_id': order_id_str,
+                    'is_recurring': False
+                }
+
+                # Usar o método de criação do modelo para consistência
+                Transaction.create_transaction(transaction_data)
+                created_count += 1
+
+            except Exception as e:
+                error_count += 1
+                print(f"❌ Erro ao processar pedido {order._id}: {e}")
+
+        # 4. Retornar o resultado
+        summary_message = (
+            f"Migração concluída. "
+            f"{created_count} transações criadas, "
+            f"{skipped_count} já existentes ignoradas, "
+            f"{error_count} erros."
+        )
+        print(f"✅ {summary_message}")
+
+        return jsonify({
+            'status': 'success',
+            'message': summary_message,
+            'orders_processed': len(existing_orders),
+            'transactions_created': created_count,
+            'skipped_duplicates': skipped_count,
+            'errors': error_count
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Erro crítico durante a migração: {e}")
+        return jsonify({'status': 'error', 'message': f'Erro interno no servidor: {e}'}), 500
+
+# --- FIM DA NOVA SEÇÃO DE MIGRAÇÃO ---
+
 # ==================================================================
 # === FUNÇÃO DE RESUMO INTERNA (CÓDIGO ORIGINAL PRESERVADO) ===
 # ==================================================================
@@ -162,7 +272,7 @@ def get_dashboard_summary(current_user_uid, current_user_data):
     context = request.args.get('context', 'business')
     current_month = datetime.now().month
     current_year = datetime.now().year
-    
+
     filters = {
         'user_id': current_user_uid,
         'context': context,
@@ -171,16 +281,16 @@ def get_dashboard_summary(current_user_uid, current_user_data):
             '$lt': datetime(current_year, current_month + 1, 1) if current_month < 12 else datetime(current_year + 1, 1, 1)
         }
     }
-    
+
     month_transactions = Transaction.find_all(filters)
-    
+
     total_income = sum(t.amount for t in month_transactions if t.type == 'income')
     total_expenses = sum(t.amount for t in month_transactions if t.type == 'expense')
     balance = total_income - total_expenses
-    
+
     pending_payments = len([t for t in month_transactions if t.type == 'expense' and t.status == 'pending'])
     upcoming_receivables = len([t for t in month_transactions if t.type == 'income' and t.status == 'pending'])
-    
+
     return {
         'balance': balance,
         'total_income': total_income,
@@ -192,90 +302,97 @@ def get_dashboard_summary(current_user_uid, current_user_data):
     }
 
 # ==================================================================
-# === ROTA DE DASHBOARD COMPLETO (MODIFICADA) ===
+# === NOVA ROTA DE DASHBOARD COMPLETO (CORRIGIDA) ===
 # ==================================================================
 
 @transactions_bp.route('/api/dashboard/full-summary', methods=['GET'])
 @verify_token
 def get_full_dashboard_summary(current_user_uid, current_user_data, *args, **kwargs): # <-- CORREÇÃO DE ASSINATURA
+    """Dashboard completo com cash_flow_distribution corrigido"""
     try:
         context = request.args.get('context', 'business')
         now = datetime.now()
-        
+
         summary_data = get_dashboard_summary(current_user_uid, current_user_data)
-        
+
+        # Tendência mensal (últimos 6 meses)
         monthly_trend = []
         for i in range(5, -1, -1):
             month_date = now - relativedelta(months=i)
             start_date = datetime(month_date.year, month_date.month, 1)
             end_date = start_date + relativedelta(months=1)
-            
+
             month_filters = {
                 'user_id': current_user_uid,
                 'context': context,
                 'date': {'$gte': start_date, '$lt': end_date}
             }
             transactions_in_month = Transaction.find_all(month_filters)
-            
+
             income = sum(t.amount for t in transactions_in_month if t.type == 'income')
             expenses = sum(t.amount for t in transactions_in_month if t.type == 'expense')
-            
+
             monthly_trend.append({
                 'month': start_date.strftime('%b'),
                 'income': income,
                 'expenses': expenses
             })
 
+        # Datas do mês atual
         current_month_start = datetime(now.year, now.month, 1)
         current_month_end = current_month_start + relativedelta(months=1)
-        
+
+        # CORREÇÃO: Buscar TODAS as transações do mês atual (receitas E despesas)
+        all_month_filters = {
+            'user_id': current_user_uid,
+            'context': context,
+            'date': {'$gte': current_month_start, '$lt': current_month_end}
+        }
+        all_month_transactions = Transaction.find_all(all_month_filters)
+
+        # CORREÇÃO: Criar distribuição unificada por categoria e tipo
+        cash_flow_distribution = {}
+        for t in all_month_transactions:
+            category_name = t.to_dict().get('category_name', 'Sem Categoria')
+            transaction_type = t.type  # 'income' ou 'expense'
+            
+            # Chave única: categoria + tipo
+            key = f"{category_name}_{transaction_type}"
+            
+            if key not in cash_flow_distribution:
+                cash_flow_distribution[key] = {
+                    'category_name': category_name,
+                    'type': transaction_type,
+                    'total': 0
+                }
+            
+            cash_flow_distribution[key]['total'] += t.amount
+
+        # Converter para lista
+        cash_flow_distribution = list(cash_flow_distribution.values())
+
+        # Estatísticas adicionais
         all_transactions_in_period_filters = {
             'user_id': current_user_uid,
             'context': context,
             'date': {'$gte': current_month_start, '$lt': current_month_end}
         }
         all_transactions_in_period = Transaction.find_all(all_transactions_in_period_filters)
-        
-        # --- INÍCIO DA MODIFICAÇÃO ---
-        # 1. Agrupar TODAS as transações (receitas e despesas) por categoria
-        
-        cash_flow_by_category = {}
-        for t in all_transactions_in_period:
-            # Usamos o to_dict() para pegar o category_name que já é resolvido no modelo
-            category_name = t.to_dict().get('category_name', 'Sem Categoria')
-            
-            # Inicializa a estrutura para uma nova categoria
-            if category_name not in cash_flow_by_category:
-                cash_flow_by_category[category_name] = {'amount': 0, 'type': t.type}
-            
-            # Soma o valor da transação ao total da categoria
-            cash_flow_by_category[category_name]['amount'] += t.amount
 
-        # 2. Formatar a saída para a API em uma lista unificada
-        cash_flow_distribution = [
-            {
-                'category_name': name,
-                'total': data['amount'],
-                'type': data['type'] # Mantemos o tipo para o frontend poder diferenciar as cores
-            } 
-            for name, data in cash_flow_by_category.items()
-        ]
-        
-        # --- FIM DA MODIFICAÇÃO ---
-        
         transaction_count = len(all_transactions_in_period)
         avg_transaction_value = (summary_data['total_income'] + summary_data['total_expenses']) / transaction_count if transaction_count > 0 else 0
 
+        # Retorno corrigido
         full_summary = {
             **summary_data,
             'monthly_trend': monthly_trend,
-            'cash_flow_distribution': cash_flow_distribution, # <<< CAMPO UNIFICADO
+            'cash_flow_distribution': cash_flow_distribution,  # <<< CAMPO CORRETO
             'transaction_count': transaction_count,
             'avg_transaction_value': avg_transaction_value,
             'cash_flow_trend': 'stable',
             'monthly_growth': 0.0,
         }
-        
+
         return jsonify(full_summary)
 
     except Exception as e:
@@ -292,11 +409,11 @@ def create_next_recurring_transaction(original_transaction):
         today = date.today()
         next_month = today.month + 1 if today.month < 12 else 1
         next_year = today.year if today.month < 12 else today.year + 1
-        
+
         last_day = calendar.monthrange(next_year, next_month)[1]
         next_day = min(original_transaction.recurring_day, last_day)
         next_due_date = datetime(next_year, next_month, next_day)
-        
+
         filters = {
             'user_id': original_transaction.user_id,
             'description': original_transaction.description,
@@ -307,9 +424,9 @@ def create_next_recurring_transaction(original_transaction):
                 '$lt': datetime(next_year, next_month + 1, 1) if next_month < 12 else datetime(next_year + 1, 1, 1)
             }
         }
-        
+
         existing = Transaction.find_all(filters)
-        
+
         if not existing:
             next_transaction = Transaction(
                 user_id=original_transaction.user_id,

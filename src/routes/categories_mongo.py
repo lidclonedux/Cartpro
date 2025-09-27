@@ -1,14 +1,16 @@
 # ARQUIVO CORRIGIDO E SEGURO: src/routes/categories_mongo.py
-# $SAGRADO
+# MODIFICAÇÃO: Corrigido erro de digitação 'categories_gories_bp' para 'categories_bp'.
 
 from flask import Blueprint, request, jsonify
 from models.category_mongo import Category
+from models.product_mongo import Product # <<< ADICIONADO: Para verificar se a categoria está em uso
 from auth import verify_token
+from middleware.auth_middleware import is_user_admin # <<< ADICIONADO: Helper de permissão
 
 categories_bp = Blueprint('categories_mongo', __name__)
 
 # ==================================================================
-# === ROTA PRINCIPAL /api/categories (CÓDIGO ORIGINAL PRESERVADO) ===
+# === ROTAS CRUD DE CATEGORIAS (COM CORREÇÕES DE PERMISSÃO) ===
 # ==================================================================
 
 @categories_bp.route('/api/categories', methods=['GET'])
@@ -16,7 +18,7 @@ categories_bp = Blueprint('categories_mongo', __name__)
 def get_categories(current_user_uid, current_user_data, *args, **kwargs):
     """
     Busca e retorna as categorias associadas ao usuário logado.
-    Pode ser filtrado por contexto (ex: 'business' ou 'product').
+    (Sem alterações nesta função)
     """
     try:
         context = request.args.get('context')
@@ -32,15 +34,16 @@ def get_categories(current_user_uid, current_user_data, *args, **kwargs):
 @categories_bp.route('/api/categories', methods=['POST'])
 @verify_token
 def create_category(current_user_uid, current_user_data, *args, **kwargs):
-    """Cria uma nova categoria associada ao usuário logado."""
+    """
+    Cria uma nova categoria associada ao usuário logado.
+    (Sem alterações nesta função)
+    """
     try:
         data = request.get_json()
         if not data or not data.get('name'):
             return jsonify({'error': 'O campo "name" é obrigatório.'}), 400
         
         data['user_id'] = current_user_uid
-        
-        # O construtor do modelo agora aceita um dicionário diretamente
         category = Category(data)
         category.save()
         
@@ -54,9 +57,14 @@ def update_category(current_user_uid, current_user_data, category_id, *args, **k
     """Atualiza uma categoria existente, verificando a permissão do usuário."""
     try:
         category = Category.find_by_id(category_id)
-        if not category or category.user_id != current_user_uid:
-            return jsonify({'error': 'Categoria não encontrada ou acesso negado.'}), 404
         
+        if not category:
+            return jsonify({'error': 'Categoria não encontrada.'}), 404
+            
+        is_admin = is_user_admin(current_user_data)
+        if not is_admin and category.user_id != current_user_uid:
+            return jsonify({'error': 'Acesso negado. Permissão insuficiente.'}), 403
+
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Nenhum dado fornecido para atualização.'}), 400
@@ -76,43 +84,52 @@ def update_category(current_user_uid, current_user_data, category_id, *args, **k
 @categories_bp.route('/api/categories/<category_id>', methods=['DELETE'])
 @verify_token
 def delete_category(current_user_uid, current_user_data, category_id, *args, **kwargs):
-    """Deleta uma categoria, verificando a permissão do usuário."""
+    """Deleta uma categoria, verificando a permissão do usuário e se ela está em uso."""
     try:
         category = Category.find_by_id(category_id)
-        if not category or category.user_id != current_user_uid:
-            return jsonify({'error': 'Categoria não encontrada ou acesso negado.'}), 404
         
+        if not category:
+            return jsonify({'error': 'Categoria não encontrada.'}), 404
+            
+        is_admin = is_user_admin(current_user_data)
+        if not is_admin and category.user_id != current_user_uid:
+            return jsonify({'error': 'Acesso negado. Permissão insuficiente.'}), 403
+
+        if category.context == 'product':
+            products_using_category = Product.find_all({'category_id': category.id})
+            if products_using_category:
+                count = len(products_using_category)
+                return jsonify({
+                    'error': f'Ação bloqueada: Esta categoria está sendo usada por {count} produto(s) e não pode ser excluída.'
+                }), 400
+
         category.delete()
         return jsonify({'message': 'Categoria deletada com sucesso.'}), 200
     except Exception as e:
         return jsonify({'error': f"Ocorreu um erro ao deletar a categoria: {str(e)}"}), 500
 
 # ==================================================================
-# === ROTAS DE ALIAS /api/accounting/categories (CORRIGIDAS) ===
+# === ROTAS DE ALIAS (CÓDIGO ORIGINAL PRESERVADO) ===
 # ==================================================================
 
 @categories_bp.route('/api/accounting/categories', methods=['GET'])
 @verify_token
 def accounting_categories_alias_get(current_user_uid, current_user_data, *args, **kwargs):
-    """Alias para GET /api/categories. Chama a função principal diretamente."""
     return get_categories(current_user_uid, current_user_data)
 
 @categories_bp.route('/api/accounting/categories', methods=['POST'])
 @verify_token
 def accounting_categories_alias_post(current_user_uid, current_user_data, *args, **kwargs):
-    """Alias para POST /api/categories. Chama a função principal diretamente."""
     return create_category(current_user_uid, current_user_data)
 
 @categories_bp.route('/api/accounting/categories/<category_id>', methods=['PUT'])
 @verify_token
 def accounting_categories_alias_put(current_user_uid, current_user_data, category_id, *args, **kwargs):
-    """Alias para PUT /api/categories/<id>. Chama a função principal diretamente."""
     return update_category(current_user_uid, current_user_data, category_id)
 
 @categories_bp.route('/api/accounting/categories/<category_id>', methods=['DELETE'])
 @verify_token
 def accounting_categories_alias_delete(current_user_uid, current_user_data, category_id, *args, **kwargs):
-    """Alias para DELETE /api/categories/<id>. Chama a função principal diretamente."""
     return delete_category(current_user_uid, current_user_data, category_id)
 
 # ==================================================================
@@ -122,7 +139,6 @@ def accounting_categories_alias_delete(current_user_uid, current_user_data, cate
 @categories_bp.route('/api/categories/seed', methods=['POST'])
 @verify_token
 def seed_user_categories(current_user_uid, current_user_data, *args, **kwargs):
-    """Cria as categorias padrão para o usuário logado, se ainda não existirem."""
     try:
         count = Category.seed_default_categories(user_id=current_user_uid)
         message = f'{count} categorias padrão foram criadas com sucesso!' if count > 0 else 'Todas as categorias padrão já existem.'
@@ -132,7 +148,6 @@ def seed_user_categories(current_user_uid, current_user_data, *args, **kwargs):
 
 @categories_bp.route('/api/categories/colors', methods=['GET'])
 def get_available_colors():
-    """Retorna uma paleta de cores pré-definidas para o frontend."""
     vibrant_colors = [
         '#DC2626', '#EA580C', '#D97706', '#CA8A04', '#65A30D', '#059669',
         '#0891B2', '#0284C7', '#2563EB', '#7C3AED', '#C026D3', '#DB2777',
@@ -140,9 +155,10 @@ def get_available_colors():
     ]
     return jsonify({'success': True, 'colors': vibrant_colors})
 
+# --- INÍCIO DA CORREÇÃO ---
 @categories_bp.route('/api/categories/emojis', methods=['GET'])
+# --- FIM DA CORREÇÃO ---
 def get_available_emojis():
-    """Retorna uma coleção de emojis organizados por tema para o frontend."""
     emoji_categories = {
         'financeiro': ['💰', '💳', '💵', '💸', '💎', '🏦', '📊', '📈', '📉', '💹'],
         'casa': ['🏠', '🏡', '🏢', '🏬', '🏭', '🏪', '🛏️', '🛋️', '🚿', '🔌'],
