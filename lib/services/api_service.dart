@@ -1,8 +1,10 @@
-// lib/services/api_service.dart - VERSÃO JWT (SEM FIREBASE)
-
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import 'package:mime/mime.dart';
+import 'package:http_parser/http_parser.dart';
 import '../utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,9 +23,8 @@ import 'api_modules/transactions/transaction_api_service.dart';
 import 'api_modules/accounting/accounting_api_service.dart';
 
 class ApiService {
-  // REMOVIDO: final FirebaseAuth _firebaseAuth;
   late final ApiHeaders _headers;
-  
+
   // Módulos especializados
   late final AuthApiService _authService;
   late final ProductApiService _productService;
@@ -36,15 +37,8 @@ class ApiService {
   late final TransactionApiService _transactionService;
   late final AccountingApiService _accountingService;
 
-  // NOVO CONSTRUTOR SEM FIREBASE
   ApiService() {
-    print("ApiService inicializado com JWT (sem Firebase)");
-    print("URL Base: ${ApiClient.baseUrl}");
-    
-    // Criar dependências na ordem correta
     _headers = ApiHeaders();
-    
-    // Inicializar todos os módulos
     _authService = AuthApiService();
     _productService = ProductApiService(_headers);
     _orderService = OrderApiService(_headers);
@@ -55,7 +49,6 @@ class ApiService {
     _settingsService = SettingsApiService(_headers);
     _transactionService = TransactionApiService(_headers);
     _accountingService = AccountingApiService(_headers);
-    
     Logger.info('ApiService: Todos os módulos inicializados com JWT');
   }
 
@@ -63,18 +56,14 @@ class ApiService {
   Future<bool> testConnectivity() => ApiClient.testConnectivity();
 
   // =========== DELEGAÇÃO PARA MÓDULOS AUTH JWT ===========
-
-  // AUTH - Delegação para AuthApiService (JWT)
   Future<Map<String, dynamic>> login(String username, String password) => _authService.login(username, password);
   Future<Map<String, dynamic>> register(String username, String password, String displayName) => _authService.register(username, password, displayName);
   Future<void> logout() => _authService.logout();
   Future<Map<String, dynamic>> getProfile() => _authService.getProfile();
-  
-  // NOVO: Métodos específicos JWT
   Future<Map<String, dynamic>> refreshToken() => _authService.refreshToken();
   Future<bool> isAuthenticated() => _authService.isAuthenticated();
   Future<void> clearAuthData() => _authService.clearAuthData();
-  Future<Map<String, dynamic>> updatePassword(String currentPassword, String newPassword) => 
+  Future<Map<String, dynamic>> updatePassword(String currentPassword, String newPassword) =>
     _authService.updatePassword(currentPassword, newPassword);
 
   // PRODUCTS
@@ -82,7 +71,6 @@ class ApiService {
   Future<Map<String, dynamic>> createProduct(Map<String, dynamic> productData) => _productService.createProduct(productData);
   Future<Map<String, dynamic>> updateProduct(String productId, Map<String, dynamic> productData) => _productService.updateProduct(productId, productData);
   Future<void> deleteProduct(String productId) => _productService.deleteProduct(productId);
-  bool _isValidProductData(Map<String, dynamic> productData) => _productService.isValidProductData(productData);
 
   // ORDERS
   Future<Map<String, dynamic>> createOrder(Map<String, dynamic> orderData) => _orderService.createOrder(orderData);
@@ -92,7 +80,7 @@ class ApiService {
 
   // CATEGORIES (E-commerce)
   Future<List<dynamic>> getCategories({String? context}) => _categoryService.getCategories(context: context);
-  Future<Map<String, dynamic>> createCategory(String name, {String? context, String? type, String? color, String? icon, String? emoji}) => 
+  Future<Map<String, dynamic>> createCategory(String name, {String? context, String? type, String? color, String? icon, String? emoji}) =>
     _categoryService.createCategory(name, context: context, type: type, color: color, icon: icon, emoji: emoji);
   Future<Map<String, dynamic>> updateCategory(String categoryId, Map<String, dynamic> categoryData) => _categoryService.updateCategory(categoryId, categoryData);
   Future<void> deleteCategory(String categoryId) => _categoryService.deleteCategory(categoryId);
@@ -105,14 +93,113 @@ class ApiService {
   Future<void> deleteAccountingCategory(String categoryId) => _accountingService.deleteAccountingCategory(categoryId);
 
   // UPLOADS
-  Future<Map<String, dynamic>> uploadProductImage({required File imageFile, String? productName}) => 
+  Future<Map<String, dynamic>> uploadProductImage({required File imageFile, String? productName}) =>
     _imageUploadService.uploadProductImage(imageFile: imageFile, productName: productName);
-  Future<Map<String, dynamic>> uploadDocument({required File file, String context = 'business', String type = 'document', String? description}) => 
+  Future<Map<String, dynamic>> uploadDocument({required File file, String context = 'business', String type = 'document', String? description}) =>
     _documentUploadService.uploadDocument(file: file, context: context, type: type, description: description);
+
+  // =========== PROCESSAMENTO DE VOZ (SEÇÃO ATUALIZADA) ===========
+
+  /// **[PARA MOBILE]** Processa comando de voz enviando um arquivo de áudio.
+  Future<Map<String, dynamic>> processVoiceCommandFromFile(File audioFile) async {
+    Logger.info('ApiService (Mobile): Iniciando processamento de comando de voz via arquivo.');
+
+    try {
+      if (!await isAuthenticated()) throw Exception('Usuário não autenticado');
+      if (!await audioFile.exists()) throw Exception('Arquivo de áudio não encontrado');
+
+      final headers = await _headers.getAuthHeaders();
+      final uri = Uri.parse('${ApiClient.baseUrl}/api/voice/process');
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(headers);
+
+      final mimeType = lookupMimeType(audioFile.path) ?? 'audio/m4a';
+      final audioStream = http.ByteStream(audioFile.openRead());
+      final audioLength = await audioFile.length();
+
+      final multipartFile = http.MultipartFile(
+        'audio', // Nome do campo esperado pelo backend
+        audioStream,
+        audioLength,
+        filename: 'voice_command.${audioFile.path.split('.').last}',
+        contentType: MediaType.parse(mimeType),
+      );
+      request.files.add(multipartFile);
+
+      Logger.info('ApiService (Mobile): Enviando áudio para processamento (${audioLength} bytes)');
+      return _sendVoiceRequest(request);
+
+    } catch (e) {
+      Logger.error('ApiService (Mobile): Erro no processamento de comando de voz', error: e);
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// **[PARA WEB]** Processa comando de voz a partir de uma URL de Blob.
+  Future<Map<String, dynamic>> processVoiceCommandFromWeb(String blobUrl) async {
+    Logger.info('ApiService (Web): Iniciando processamento de comando de voz via Blob URL.');
+
+    try {
+      if (!await isAuthenticated()) throw Exception('Usuário não autenticado');
+
+      // 1. Baixar os dados do Blob
+      final audioDataResponse = await http.get(Uri.parse(blobUrl));
+      if (audioDataResponse.statusCode != 200) {
+        throw Exception('Falha ao baixar os dados do áudio da URL do Blob.');
+      }
+      final Uint8List audioBytes = audioDataResponse.bodyBytes;
+
+      // 2. Montar e enviar a requisição
+      final headers = await _headers.getAuthHeaders();
+      final uri = Uri.parse('${ApiClient.baseUrl}/api/voice/process');
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(headers);
+
+      final multipartFile = http.MultipartFile.fromBytes(
+        'audio', // O mesmo nome de campo esperado pelo backend
+        audioBytes,
+        filename: 'voice_command_web.m4a', // Nome de arquivo para o backend
+        contentType: MediaType('audio', 'm4a'),
+      );
+      request.files.add(multipartFile);
+
+      Logger.info('ApiService (Web): Enviando áudio para processamento (${audioBytes.length} bytes)');
+      return _sendVoiceRequest(request);
+
+    } catch (e) {
+      Logger.error('ApiService (Web): Erro no processamento de comando de voz', error: e);
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// **[MÉTODO PRIVADO]** Envia a requisição de voz e processa a resposta.
+  Future<Map<String, dynamic>> _sendVoiceRequest(http.MultipartRequest request) async {
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    Logger.info('ApiService (Voice): Resposta recebida - Status: ${response.statusCode}');
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final responseData = json.decode(response.body);
+      if (responseData['success'] == true) {
+        Logger.info('ApiService (Voice): Comando de voz processado com sucesso.');
+        return responseData;
+      } else {
+        throw Exception(responseData['error'] ?? 'Erro desconhecido no processamento de voz');
+      }
+    } else {
+      try {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Erro HTTP ${response.statusCode}');
+      } catch (_) {
+        throw Exception('Erro HTTP ${response.statusCode}: ${response.body}');
+      }
+    }
+  }
 
   // PAYMENTS
   Future<Map<String, dynamic>> getStorePaymentInfo(String storeOwnerId) => _paymentService.getStorePaymentInfo(storeOwnerId);
-  Future<String> uploadPaymentProof({required File imageFile, String? orderId, String? description}) => 
+  Future<String> uploadPaymentProof({required File imageFile, String? orderId, String? description}) =>
     _paymentService.uploadPaymentProof(imageFile: imageFile, orderId: orderId, description: description);
 
   // SETTINGS
@@ -133,13 +220,8 @@ class ApiService {
   Future<void> deleteRecurringTransaction(String recurringTransactionId) => _accountingService.deleteRecurringTransaction(recurringTransactionId);
 
   // =========== GETTERS UTILITÁRIOS JWT ===========
-  
   String get baseUrl => ApiClient.baseUrl;
-  
-  // MODIFICADO: Usar JWT em vez de Firebase
   Future<bool> get isAuthenticatedSync async => await isAuthenticated();
-  
-  // MODIFICADO: Obter de SharedPreferences
   Future<String?> get currentUserId async {
     try {
       final profile = await getProfile();
@@ -148,20 +230,14 @@ class ApiService {
       return null;
     }
   }
-  
-  // CORREÇÃO: Getter para AccountingApiService
   AccountingApiService get accountingService => _accountingService;
-
-  // CORREÇÃO: Adicionar getter para TransactionApiService (estava faltando)
   TransactionApiService get transactionService => _transactionService;
-
-  // MODIFICADO: Informações do usuário via JWT
   Future<Map<String, String?>> get currentUserInfo async {
     try {
       final profile = await getProfile();
       final user = profile['user'];
       if (user == null) return {};
-      
+
       return {
         'uid': user['uid']?.toString(),
         'username': user['username']?.toString(),
@@ -177,29 +253,21 @@ class ApiService {
   }
 
   // =========== MÉTODOS UTILITÁRIOS JWT ===========
-  
   void clearLocalCache() {
     Logger.info('ApiService: Cache local limpo (se existir)');
   }
 
   Future<Map<String, dynamic>> runDiagnostics() async {
     final results = <String, dynamic>{};
-    
     try {
       Logger.info('ApiService: Executando diagnósticos JWT...');
-      
       final connectivityResult = await testConnectivity();
       results['connectivity'] = connectivityResult;
-      
-      // Verificar autenticação JWT
       final isAuth = await isAuthenticated();
       results['jwt_authenticated'] = isAuth;
-      
-      // Verificar token local
       final prefs = await SharedPreferences.getInstance();
       final hasToken = prefs.getString('jwt_token') != null;
       results['has_local_token'] = hasToken;
-      
       if (isAuth) {
         try {
           final profile = await getProfile();
@@ -209,7 +277,6 @@ class ApiService {
           results['profile_error'] = e.toString();
         }
       }
-      
       try {
         final categories = await getCategories();
         results['api_categories'] = categories.isNotEmpty;
@@ -217,18 +284,13 @@ class ApiService {
         results['api_categories'] = false;
         results['categories_error'] = e.toString();
       }
-      
       results['is_production'] = ApiClient.baseUrl.contains('render.com');
       results['base_url'] = ApiClient.baseUrl;
       results['auth_type'] = 'JWT';
-      
-      // Diagnósticos específicos do auth service
       final authDiagnostics = await _authService.runAuthDiagnostics();
       results['auth_diagnostics'] = authDiagnostics;
-      
       Logger.info('ApiService: Diagnósticos JWT concluídos');
       return results;
-      
     } catch (e) {
       Logger.error('ApiService: Erro nos diagnósticos JWT', error: e);
       results['error'] = e.toString();
@@ -246,15 +308,11 @@ class ApiService {
   }
 
   // =========== MÉTODOS DE MANUTENÇÃO TOKEN ===========
-
-  /// Verifica se o token precisa ser renovado
   Future<bool> needsTokenRefresh() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final tokenSavedTime = prefs.getInt('jwt_token_saved_time') ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      
-      // Se passou mais de 20 horas, renovar (considerando token de 24h)
       final hoursPassed = (now - tokenSavedTime) / (1000 * 60 * 60);
       return hoursPassed > 20;
     } catch (e) {
@@ -263,7 +321,6 @@ class ApiService {
     }
   }
 
-  /// Tenta renovar token automaticamente
   Future<bool> tryAutoRefreshToken() async {
     try {
       if (await needsTokenRefresh()) {
@@ -278,7 +335,6 @@ class ApiService {
     }
   }
 
-  /// Salva timestamp do token para controle de expiração
   Future<void> _saveTokenTimestamp() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -289,17 +345,12 @@ class ApiService {
   }
 
   // =========== MÉTODOS DE COMPATIBILIDADE ===========
-
-  /// Mantém compatibilidade com código existente que pode chamar estes métodos
   Future<void> signOut() async {
     Logger.info('ApiService: Método signOut (compatibilidade) - redirecionando para logout JWT');
     await logout();
   }
 
-  /// Verifica se usuário está "logado" (compatibilidade)
   Future<bool> get isSignedIn async => await isAuthenticated();
-
-  /// Obtém dados do usuário atual (compatibilidade)
   Future<Map<String, dynamic>?> get currentUser async {
     try {
       final profile = await getProfile();
@@ -310,24 +361,15 @@ class ApiService {
   }
 
   // =========== LIMPEZA E CLEANUP ===========
-
-  /// Limpa todos os dados relacionados à autenticação
   Future<void> fullAuthCleanup() async {
     try {
       Logger.info('ApiService: Iniciando limpeza completa de autenticação');
-      
-      // Limpar dados do auth service
       await clearAuthData();
-      
-      // Limpar SharedPreferences relacionadas
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
       await prefs.remove('jwt_token_saved_time');
-      await prefs.remove('user_data'); // Se existir
-      
-      // Limpar cache local
+      await prefs.remove('user_data');
       clearLocalCache();
-      
       Logger.info('ApiService: Limpeza completa concluída');
     } catch (e) {
       Logger.error('ApiService: Erro na limpeza completa', error: e);
@@ -335,9 +377,7 @@ class ApiService {
     }
   }
 
-  /// Método de disposição de recursos
   void dispose() {
     Logger.info('ApiService: Recursos liberados');
-    // Aqui podem ser adicionadas limpezas específicas se necessário
   }
 }

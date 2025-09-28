@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   
   cupertino_icons: ^1.0.6
+ # speech_to_text: ^6.6.2
   
   # REMOVIDO: Firebase Dependencies
   # firebase_core: ^2.27.1
@@ -36,6 +37,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   fl_chart: ^0.68.0
   lucide_icons_flutter: ^3.1.0
+  record: ^5.0.5
 
   # Voice recognition - MOVIDO PARA DEPENDENCIES
  # speech_to_text: ^6.6.0

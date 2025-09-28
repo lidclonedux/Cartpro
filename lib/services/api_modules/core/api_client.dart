@@ -4,8 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // <-- ADIÇÃO: Importado para usar kDebugMode
-import 'package:http/http.dart' as http;
-import 'package:vitrine_borracharia/utils/logger.dart';
+import 'package:http/http.dart' as http;                          import 'package:vitrine_borracharia/utils/logger.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -25,16 +24,13 @@ class ApiClient {
       : "https://maykonrodass.onrender.com/api"; // URL de Produção
 
   static const Duration _timeout = Duration(seconds: 20);
-
-  static Future<http.Response> _sendRequest(
+                                                                    static Future<http.Response> _sendRequest(
       Future<http.Response> Function() request,
-      String endpoint,
-      ) async {
+      String endpoint,                                                  ) async {
     try {
       final response = await request().timeout(_timeout);
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return response;
-      } else {
+        return response;                                                } else {
         final errorBody = json.decode(response.body);
         final errorMessage = errorBody["error"] ?? "Erro desconhecido";
         Logger.error("API Error ($endpoint): ${response.statusCode} - $errorMessage");
@@ -45,8 +41,7 @@ class ApiClient {
       throw Exception("A requisição excedeu o tempo limite. Tente novamente.");
     } on SocketException {
       Logger.error("API Network Error ($endpoint): Sem conexão com a internet.");
-      throw Exception("Sem conexão com a internet. Verifique sua conexão.");
-    } catch (e) {
+      throw Exception("Sem conexão com a internet. Verifique sua conexão.");                                                            } catch (e) {
       Logger.error("API Exception ($endpoint): $e");
       rethrow;
     }
@@ -57,31 +52,25 @@ class ApiClient {
     return _sendRequest(
           () => http.get(Uri.parse("$baseUrl$endpoint"), headers: headers),
       endpoint,
-    );
-  }
+    );                                                              }
 
   static Future<http.Response> post(String endpoint, {Map<String, String>? headers, Object? body}) {
     Logger.info("API POST: $baseUrl$endpoint");
     return _sendRequest(
           () => http.post(Uri.parse("$baseUrl$endpoint"), headers: headers, body: body),
-      endpoint,
-    );
+      endpoint,                                                       );
   }
 
   static Future<http.Response> put(String endpoint, {Map<String, String>? headers, Object? body}) {
     Logger.info("API PUT: $baseUrl$endpoint");
     return _sendRequest(
-          () => http.put(Uri.parse("$baseUrl$endpoint"), headers: headers, body: body),
-      endpoint,
-    );
-  }
+          () => http.put(Uri.parse("$baseUrl$endpoint"), headers: headers, body: body),                                                   endpoint,
+    );                                                              }
 
-  static Future<http.Response> delete(String endpoint, {Map<String, String>? headers}) {
-    Logger.info("API DELETE: $baseUrl$endpoint");
+  static Future<http.Response> delete(String endpoint, {Map<String, String>? headers}) {                                                Logger.info("API DELETE: $baseUrl$endpoint");
     return _sendRequest(
           () => http.delete(Uri.parse("$baseUrl$endpoint"), headers: headers),
-      endpoint,
-    );
+      endpoint,                                                       );
   }
 
   static Future<bool> testConnectivity() async {

@@ -1,6 +1,6 @@
 // lib/widgets/voice_command_widget.dart
 // Interface completa para comando de voz integrada com VoiceProvider
-// VERSÃO ATUALIZADA: Envia o Map<String, dynamic> diretamente para o TransactionProvider.
+// VERSÃO CORRIGIDA: Compatível com o novo fluxo de gravação de áudio
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -45,6 +45,56 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+
+    // Configurar callbacks do VoiceProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupVoiceProviderCallbacks();
+    });
+  }
+
+  void _setupVoiceProviderCallbacks() {
+    final voiceProvider = context.read<VoiceProvider>();
+    final transactionProvider = context.read<TransactionProvider>();
+
+    voiceProvider.setCallbacks(
+      onTransactionCreated: (transactionData) async {
+        try {
+          await transactionProvider.createTransaction(transactionData);
+          Logger.info('VoiceCommandWidget: Transação criada via callback do VoiceProvider');
+          
+          if (mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Lançamento criado com sucesso via comando de voz!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          Logger.error('VoiceCommandWidget: Erro no callback de criação', error: e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Erro ao criar lançamento: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+      onError: (error) {
+        Logger.error('VoiceCommandWidget: Erro via callback do VoiceProvider: $error');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+    );
   }
 
   @override
@@ -59,8 +109,8 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
       backgroundColor: Colors.transparent,
       child: Consumer<VoiceProvider>(
         builder: (context, voiceProvider, child) {
-          // Controlar animação baseado no estado
-          if (voiceProvider.isListening) {
+          // Controlar animação baseado no estado (CORRIGIDO para isRecording)
+          if (voiceProvider.isRecording) {
             _animationController.repeat(reverse: true);
           } else {
             _animationController.stop();
@@ -140,7 +190,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
               ],
             ),
           ),
-          if (!voiceProvider.isListening && !voiceProvider.hasConfirmationPending)
+          if (!voiceProvider.isRecording && !voiceProvider.hasConfirmationPending)
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.close, color: Colors.white70),
@@ -156,7 +206,42 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
       child: Column(
         children: [
           const SizedBox(height: 20),
-          // Botão principal de microfone com animação
+          
+          // Verificar se a gravação está disponível
+          if (!voiceProvider.isRecordingAvailable) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Gravação de áudio não está disponível. Verifique as permissões.',
+                      style: TextStyle(color: Colors.orange, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => voiceProvider.enableRecording(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tentar Ativar Gravação', style: TextStyle(color: Colors.white)),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Botão principal de microfone com animação (CORRIGIDO)
           AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
@@ -165,30 +250,40 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
                 child: Opacity(
                   opacity: _opacityAnimation.value,
                   child: GestureDetector(
-                    onTap: voiceProvider.isListening
-                        ? voiceProvider.stopListening
-                        : voiceProvider.startListening,
+                    onTap: voiceProvider.isRecordingAvailable 
+                        ? (voiceProvider.isRecording
+                            ? voiceProvider.stopListening
+                            : voiceProvider.startListening)
+                        : null,
                     child: Container(
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: voiceProvider.isListening
+                        color: voiceProvider.isRecording
                             ? Colors.red.withOpacity(0.2)
                             : const Color(0xFF9147FF).withOpacity(0.2),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: voiceProvider.isListening
+                          color: voiceProvider.isRecording
                               ? Colors.red
-                              : const Color(0xFF9147FF),
+                              : (voiceProvider.isRecordingAvailable 
+                                  ? const Color(0xFF9147FF)
+                                  : Colors.grey),
                           width: 3,
                         ),
                       ),
                       child: Icon(
-                        voiceProvider.isListening ? Icons.mic : Icons.mic_none,
+                        voiceProvider.isRecording 
+                            ? Icons.stop 
+                            : (voiceProvider.isRecordingAvailable 
+                                ? Icons.mic_none 
+                                : Icons.mic_off),
                         size: 48,
-                        color: voiceProvider.isListening
+                        color: voiceProvider.isRecording
                             ? Colors.red
-                            : const Color(0xFF9147FF),
+                            : (voiceProvider.isRecordingAvailable 
+                                ? const Color(0xFF9147FF)
+                                : Colors.grey),
                       ),
                     ),
                   ),
@@ -197,11 +292,14 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
             },
           ),
           const SizedBox(height: 30),
-          // Texto de instrução
+          
+          // Texto de instrução (CORRIGIDO)
           Text(
-            voiceProvider.isListening
-                ? 'Ouvindo... Fale agora'
-                : 'Toque no microfone e fale seu comando',
+            voiceProvider.isRecording
+                ? 'Gravando... Fale agora e toque novamente para parar'
+                : (voiceProvider.isRecordingAvailable 
+                    ? 'Toque no microfone e fale seu comando'
+                    : 'Gravação não disponível'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -210,8 +308,9 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 10),
-          // Exemplos de comandos
-          if (!voiceProvider.isListening) ...[
+          
+          // Exemplos de comandos (apenas se não estiver gravando)
+          if (!voiceProvider.isRecording && voiceProvider.isRecordingAvailable) ...[
             const Text(
               'Exemplos:',
               style: TextStyle(
@@ -223,8 +322,9 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
             const SizedBox(height: 8),
             _buildExampleCommand('• "Despesa de 50 reais para almoço"'),
             _buildExampleCommand('• "Receita de 1000 reais de venda"'),
-            _buildExampleCommand('• "Agendar aluguel de 800 reais todo dia 5"'),
+            _buildExampleCommand('• "Gasto de 200 reais em combustível"'),
           ],
+          
           // Transcript atual
           if (voiceProvider.currentTranscript.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -285,6 +385,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
               },
             ),
           ),
+          
           // Campo de entrada manual (opcional)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -306,10 +407,16 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: voiceProvider.startListening,
-                  icon: const Icon(Icons.mic, color: Color(0xFF9147FF)),
-                ),
+                if (voiceProvider.isRecordingAvailable)
+                  IconButton(
+                    onPressed: voiceProvider.isRecording 
+                        ? voiceProvider.stopListening 
+                        : voiceProvider.startListening,
+                    icon: Icon(
+                      voiceProvider.isRecording ? Icons.stop : Icons.mic, 
+                      color: voiceProvider.isRecording ? Colors.red : const Color(0xFF9147FF)
+                    ),
+                  ),
               ],
             ),
           ),
@@ -320,7 +427,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
 
   Widget _buildConversationMessage(ConversationMessage message) {
     final isUser = message.sender == 'user';
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -339,8 +446,8 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isUser 
-                    ? const Color(0xFF9147FF) 
+                color: isUser
+                    ? const Color(0xFF9147FF)
                     : const Color(0xFF36393F),
                 borderRadius: BorderRadius.circular(16).copyWith(
                   bottomRight: isUser ? const Radius.circular(4) : null,
@@ -373,7 +480,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
     final confirmation = voiceProvider.pendingConfirmation!;
     final transactionData = confirmation['transaction_data'] as Map<String, dynamic>;
     final category = confirmation['category'];
-    
+
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -417,6 +524,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
+            
             // Detalhes da transação
             Expanded(
               child: Container(
@@ -437,8 +545,8 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
                     _buildConfirmationDetail(
                       'Tipo',
                       transactionData['type'] == 'income' ? 'Receita' : 'Despesa',
-                      transactionData['type'] == 'income' 
-                          ? Icons.arrow_upward 
+                      transactionData['type'] == 'income'
+                          ? Icons.arrow_upward
                           : Icons.arrow_downward,
                     ),
                     _buildConfirmationDetail(
@@ -468,6 +576,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
               ),
             ),
             const SizedBox(height: 20),
+            
             // Botões de ação
             Row(
               children: [
@@ -632,9 +741,9 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
   String _getStatusText(VoiceState state) {
     switch (state) {
       case VoiceState.idle:
-        return 'Pronto para ouvir comandos';
-      case VoiceState.listening:
-        return 'Ouvindo...';
+        return 'Pronto para gravar comandos';
+      case VoiceState.recording:  // CORRIGIDO: era listening
+        return 'Gravando...';
       case VoiceState.processing:
         return 'Processando comando...';
       case VoiceState.conversation:
@@ -648,7 +757,6 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
 
   String _formatDateFromString(String? dateString) {
     if (dateString == null) return 'N/A';
-    
     try {
       final date = DateTime.parse(dateString);
       return '${date.day.toString().padLeft(2, '0')}/'
@@ -659,41 +767,20 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget>
     }
   }
 
-  // <<< CORREÇÃO PRINCIPAL APLICADA AQUI >>>
+  // Método de confirmação atualizado
   Future<void> _confirmTransaction(VoiceProvider voiceProvider) async {
     try {
-      // 1. Pega o Map<String, dynamic> diretamente do provider. Ele já está completo.
-      final transactionData = voiceProvider.pendingConfirmation!['transaction_data'] as Map<String, dynamic>;
+      // Usar o método próprio do VoiceProvider que já tem os callbacks configurados
+      await voiceProvider.confirmTransaction();
       
-      // 2. Passa o Map diretamente para o TransactionProvider.
-      await context.read<TransactionProvider>().createTransaction(transactionData);
-      
-      Logger.info('VoiceCommandWidget: Transação criada com sucesso via voz');
-      
-      // Reset do voice provider
-      voiceProvider.reset();
-      
-      // Fechar dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      
-      // Mostrar sucesso
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lançamento criado com sucesso via comando de voz!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      Logger.info('VoiceCommandWidget: Confirmação delegada ao VoiceProvider');
       
     } catch (e) {
       Logger.error('VoiceCommandWidget: Erro ao confirmar transação', error: e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao criar lançamento: ${e.toString()}'),
+            content: Text('Erro ao confirmar lançamento: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
