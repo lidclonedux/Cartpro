@@ -5,22 +5,21 @@ plugins {
 }
 
 def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('../local.properties') // Adjusted path relative to app module
+def localPropertiesFile = rootProject.file('../local.properties')
 if (localPropertiesFile.exists()) {
     localPropertiesFile.withReader('UTF-8') { reader ->
         localProperties.load(reader)
     }
 }
 
-// Read keystore properties
 def keyProperties = new Properties()
-def keyPropertiesFile = rootProject.file('key.properties') // Path relative to app module
+def keyPropertiesFile = rootProject.file('key.properties')
 if (keyPropertiesFile.exists()) {
     keyProperties.load(new FileInputStream(keyPropertiesFile))
 }
 
 def getPubspecVersionInfo() {
-    def pubspecFile = rootProject.file("../pubspec.yaml") // Path relative to app module
+    def pubspecFile = rootProject.file("../pubspec.yaml")
     if (!pubspecFile.exists()) {
         throw new GradleException("File not found: ${pubspecFile.absolutePath}")
     }
@@ -29,15 +28,12 @@ def getPubspecVersionInfo() {
     if (versionLine == null) {
         throw new GradleException("Missing 'version:' line in pubspec.yaml")
     }
-    // Regex to match 'X.Y.Z+B' format
     def matcher = versionLine =~ /version:\s*(\d+\.\d+\.\d+)\+(\d+)/
     if (!matcher.find()) {
-        // Fallback regex for 'X.Y.Z' format if no build number is present
         matcher = versionLine =~ /version:\s*(\d+\.\d+\.\d+)/
         if (!matcher.find()) {
              throw new GradleException("Invalid 'version:' format in pubspec.yaml. Expected 'X.Y.Z+B' or 'X.Y.Z'. Found: ${versionLine}")
         }
-        // If only X.Y.Z is found, use 1 as default build number
         return [name: matcher.group(1), code: 1]
     }
     return [name: matcher.group(1), code: matcher.group(2).toInteger()]
@@ -50,20 +46,20 @@ android {
     compileSdk 35
     ndkVersion "25.1.8937393"
 
-    // Define signing configurations
+    // =================== INÍCIO DA CORREÇÃO ===================
     signingConfigs {
         release {
+            // Apenas define a configuração de release.
+            // A verificação do arquivo key.properties será feita no buildTypes.
             if (keyPropertiesFile.exists()) {
-                storeFile file(keyProperties['storeFile']) // Path from key.properties
+                storeFile file(keyProperties['storeFile'])
                 storePassword keyProperties['storePassword']
                 keyAlias keyProperties['keyAlias']
                 keyPassword keyProperties['keyPassword']
-            } else {
-                println "Warning: key.properties not found. Using debug signing for release."
-                signingConfig signingConfigs.debug
             }
         }
     }
+    // =================== FIM DA CORREÇÃO =====================
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -91,12 +87,16 @@ android {
     buildTypes {
         release {
             // =================== INÍCIO DA CORREÇÃO ===================
-            // A configuração do ProGuard foi removida pois 'minifyEnabled' está 'false'.
-            // Isso evita a ativação acidental do otimizador R8, que é a causa provável do problema.
-            signingConfig signingConfigs.release
+            // Aplica a configuração de assinatura.
+            // Se o arquivo key.properties existir, usa a config 'release'.
+            // Caso contrário, o Gradle usará a de 'debug' por padrão para builds locais.
+            if (keyPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+            // =================== FIM DA CORREÇÃO =====================
+            
             minifyEnabled false
             shrinkResources false
-            // =================== FIM DA CORREÇÃO =====================
         }
         debug {
             minifyEnabled false
