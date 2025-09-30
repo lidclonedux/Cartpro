@@ -5,55 +5,46 @@ workflows:
   build-android-and-web:
     name: 'Build Completo (Release APK + Web App)'
     instance_type: mac_mini_m2
-    # =================== INÍCIO DA CORREÇÃO ===================
-    flutter: 3.35.4
-    # =================== FIM DA CORREÇÃO ======================
     environment:
+      # =================== INÍCIO DA CORREÇÃO ===================
+      flutter: 3.35.4
+      # =================== FIM DA CORREÇÃO ======================
       groups:
         - Borracharia # Grupo que contém suas variáveis de ambiente
     triggering:
       events:
         - push
       branch_patterns:
-        - pattern: main # Usando 'main' como sua branch principal
+        - pattern: main
           include: true
         - pattern: develop
           include: true
     scripts:
-      # PASSO 1: DECODIFICAR CREDENCIAIS
+      # ... (o resto do seu script permanece o mesmo)
       - name: Set up Android credentials
         script: |
-          set -e # Para o script se qualquer comando falhar
+          set -e
           echo "Decodificando credenciais Android..."
-          # Usando GCLOUD_KEY_FILE como o nome da variável para o google-services.json
           echo $GCLOUD_KEY_FILE | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
           echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/keystore.jks
-          
           cat > $CM_BUILD_DIR/android/key.properties <<EOF
           storePassword=$CM_KEYSTORE_PASSWORD
-          keyPassword=$CM_KEY_ALIAS_PASSWORD # Usando a variável correta para a senha do alias
+          keyPassword=$CM_KEY_ALIAS_PASSWORD
           keyAlias=$CM_KEY_ALIAS
           storeFile=keystore.jks
           EOF
           echo "✅ Credenciais Android configuradas com sucesso!"
-
-      # PASSO 2: INSTALAR DEPENDÊNCIAS
       - name: Get Flutter packages
         script: |
           flutter pub get
-
-      # PASSO 3: BUILD DO APK DE RELEASE
       - name: Build Android Release APK (Signed)
         script: |
           echo "Iniciando build do APK de Release assinado..."
           flutter build apk --release
-
-      # PASSO 4: BUILD DO APLICATIVO WEB
       - name: Build Flutter Web
         script: |
           echo "Iniciando build do Flutter Web..."
           flutter build web --release
-
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
       - build/web/**
@@ -64,31 +55,26 @@ workflows:
   debug-build:
     name: 'Build de Debug (Android APK)'
     instance_type: mac_mini_m2
-    # =================== INÍCIO DA CORREÇÃO ===================
-    flutter: 3.35.4
-    # =================== FIM DA CORREÇÃO ======================
     environment:
+      # =================== INÍCIO DA CORREÇÃO ===================
+      flutter: 3.35.4
+      # =================== FIM DA CORREÇÃO ======================
       groups:
         - Borracharia
     scripts:
-      # PASSO 1: DECODIFICAR CREDENCIAIS (APENAS google-services.json)
+      # ... (o resto do seu script permanece o mesmo)
       - name: Set up Google Services
         script: |
           echo "Decodificando google-services.json..."
           echo $GCLOUD_KEY_FILE | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
           echo "✅ google-services.json configurado."
-
-      # PASSO 2: INSTALAR DEPENDÊNCIAS
       - name: Get Flutter packages
         script: |
           flutter pub get
-
-      # PASSO 3: BUILD DO APK DE DEBUG
       - name: Build Android Debug APK
         script: |
           echo "Iniciando build do APK de Debug..."
           flutter build apk --debug
-
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
 
@@ -98,30 +84,25 @@ workflows:
   profile-build:
     name: 'Build de Profile (Diagnóstico Android)'
     instance_type: mac_mini_m2
-    # =================== INÍCIO DA CORREÇÃO ===================
-    flutter: 3.35.4
-    # =================== FIM DA CORREÇÃO ======================
     environment:
+      # =================== INÍCIO DA CORREÇÃO ===================
+      flutter: 3.35.4
+      # =================== FIM DA CORREÇÃO ======================
       groups:
         - Borracharia
     scripts:
-      # PASSO 1: DECODIFICAR CREDENCIAIS (APENAS google-services.json)
+      # ... (o resto do seu script permanece o mesmo)
       - name: Set up Google Services
         script: |
           echo "Decodificando google-services.json..."
           echo $GCLOUD_KEY_FILE | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
           echo "✅ google-services.json configurado."
-
-      # PASSO 2: INSTALAR DEPENDÊNCIAS
       - name: Get Flutter packages
         script: |
           flutter pub get
-
-      # PASSO 3: BUILD DO APK DE PROFILE
       - name: Build Android Profile APK
         script: |
           echo "Iniciando build do APK de Profile para diagnóstico..."
           flutter build apk --profile
-
     artifacts:
       - build/app/outputs/flutter-apk/app-profile.apk
