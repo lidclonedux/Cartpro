@@ -5,6 +5,9 @@ workflows:
   build-android-and-web:
     name: 'Build Completo (Release APK + Web App)'
     instance_type: mac_mini_m2
+    # =================== INÍCIO DA CORREÇÃO ===================
+    flutter: 3.35.4
+    # =================== FIM DA CORREÇÃO ======================
     environment:
       groups:
         - Borracharia # Grupo que contém suas variáveis de ambiente
@@ -61,6 +64,9 @@ workflows:
   debug-build:
     name: 'Build de Debug (Android APK)'
     instance_type: mac_mini_m2
+    # =================== INÍCIO DA CORREÇÃO ===================
+    flutter: 3.35.4
+    # =================== FIM DA CORREÇÃO ======================
     environment:
       groups:
         - Borracharia
@@ -92,6 +98,9 @@ workflows:
   profile-build:
     name: 'Build de Profile (Diagnóstico Android)'
     instance_type: mac_mini_m2
+    # =================== INÍCIO DA CORREÇÃO ===================
+    flutter: 3.35.4
+    # =================== FIM DA CORREÇÃO ======================
     environment:
       groups:
         - Borracharia
