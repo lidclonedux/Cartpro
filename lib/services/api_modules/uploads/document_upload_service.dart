@@ -152,6 +152,7 @@ class DocumentUploadService {
   }
 
   String _getFileExtension(String filePath) {
+    // Usando path.extension para mais segurança
     return path.extension(filePath).replaceAll('.', '').toLowerCase();
   }
 
