@@ -2,11 +2,13 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: unused_import
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+// ignore: depend_on_referenced_packages
 import 'package:path/path.dart' as path;
 import '../core/api_client.dart';
 import '../core/api_headers.dart';
@@ -18,7 +20,7 @@ class ImageUploadService {
   ImageUploadService(this._headers);
 
   Future<Map<String, dynamic>> uploadProductImage({
-    dynamic imageFile,
+    dynamic imageFile, // Este é o parâmetro para mobile
     Uint8List? imageBytes,
     String? filename,
     String? productName,
@@ -44,7 +46,8 @@ class ImageUploadService {
         Logger.info('ImageUpload: Arquivo (Web): $filename');
       } else {
         Logger.info('ImageUpload: Plataforma Mobile detectada.');
-        final mobileFile = file;
+        // CORREÇÃO AQUI: Usar 'imageFile' em vez de 'file'
+        final mobileFile = imageFile; 
         if (mobileFile == null) {
           throw Exception('Erro interno: Arquivo de imagem mobile ausente.');
         }
@@ -89,7 +92,8 @@ class ImageUploadService {
         );
         Logger.info('ImageUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (imageFile != null) {
-        final mobileFile = file;
+        // CORREÇÃO AQUI: Usar 'imageFile' em vez de 'file'
+        final mobileFile = imageFile;
         final fileStream = http.ByteStream(mobileFile.openRead());
         multipartFile = http.MultipartFile(
           'file',
