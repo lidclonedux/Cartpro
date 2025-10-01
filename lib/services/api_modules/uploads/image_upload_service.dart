@@ -2,7 +2,6 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-// A importação condicional que você já tinha está correta e será mantida.
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:async';
@@ -19,8 +18,6 @@ class ImageUploadService {
   ImageUploadService(this._headers);
 
   Future<Map<String, dynamic>> uploadProductImage({
-    // CORREÇÃO 1: Trocamos 'File?' por 'dynamic'.
-    // O compilador web não vai mais reclamar. No mobile, você continuará passando um objeto File.
     dynamic imageFile,
     Uint8List? imageBytes,
     String? filename,
@@ -47,7 +44,6 @@ class ImageUploadService {
         Logger.info('ImageUpload: Arquivo (Web): $filename');
       } else {
         Logger.info('ImageUpload: Plataforma Mobile detectada.');
-        // Aqui, tratamos o 'dynamic' como o 'File' que ele realmente é no mobile.
         final mobileFile = imageFile as File;
         if (mobileFile == null) {
           throw Exception('Erro interno: Arquivo de imagem mobile ausente.');
@@ -93,7 +89,6 @@ class ImageUploadService {
         );
         Logger.info('ImageUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (imageFile != null) {
-        // Aqui também, tratamos o 'dynamic' como 'File'.
         final mobileFile = imageFile as File;
         final fileStream = http.ByteStream(mobileFile.openRead());
         multipartFile = http.MultipartFile(
@@ -169,9 +164,7 @@ class ImageUploadService {
       Logger.error('ImageUpload: Erro de formato na resposta', error: e);
       throw Exception('Servidor retornou resposta inválida');
     } catch (e) {
-      // CORREÇÃO 2: Verificamos o erro pela string, sem mencionar o tipo 'SocketException'.
-      // Isso evita o erro de compilação e mantém a funcionalidade no mobile.
-      if (!kIsWeb && e.toString().contains('SocketException')) {
+      if (!kIsWeb && e.runtimeType.toString() == 'SocketException') {
         Logger.error('ImageUpload: Erro de conexão no upload', error: e);
         throw Exception('Erro de conexão: Verifique sua internet e tente novamente');
       }
