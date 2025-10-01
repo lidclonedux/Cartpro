@@ -2,8 +2,6 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-// CORREÇÃO 1: O import de 'dart:io' foi substituído por uma importação condicional.
-// Isso evita que os tipos 'File' e 'SocketException' causem erro de compilação na web.
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:async';
@@ -19,9 +17,8 @@ class DocumentUploadService {
 
   DocumentUploadService(this._headers);
 
-  // A assinatura do método foi mantida, pois a importação condicional já lida com o tipo 'File'.
   Future<Map<String, dynamic>> uploadDocument({
-    File? file,
+    dynamic file,
     Uint8List? fileBytes,
     String? filename,
     String context = 'business',
@@ -56,14 +53,14 @@ class DocumentUploadService {
         if (file == null) {
           throw Exception('Erro interno: Arquivo de documento mobile ausente.');
         }
-        if (!await file.exists()) {
-          throw Exception('Arquivo não encontrado: ${file.path}');
+        final mobileFile = file as File;
+        if (!await mobileFile.exists()) {
+          throw Exception('Arquivo não encontrado: ${mobileFile.path}');
         }
-        fileSize = await file.length();
-        // Usando path.basename para mais segurança
-        finalFilename = path.basename(file.path);
-        fileExtension = _getFileExtension(file.path);
-        Logger.info('DocumentUpload: Arquivo (Mobile): ${file.path}');
+        fileSize = await mobileFile.length();
+        finalFilename = path.basename(mobileFile.path);
+        fileExtension = _getFileExtension(mobileFile.path);
+        Logger.info('DocumentUpload: Arquivo (Mobile): ${mobileFile.path}');
       }
 
       Logger.info('DocumentUpload: Tamanho do documento: ${fileSize ~/ 1024}KB');
@@ -90,7 +87,8 @@ class DocumentUploadService {
         Logger.info('DocumentUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (file != null) {
         // --- MOBILE: Usa o stream do arquivo ---
-        final fileStream = http.ByteStream(file.openRead());
+        final mobileFile = file as File;
+        final fileStream = http.ByteStream(mobileFile.openRead());
         multipartFile = http.MultipartFile(
           'file',
           fileStream,
@@ -139,9 +137,7 @@ class DocumentUploadService {
       Logger.error('DocumentUpload: Timeout no upload do documento');
       throw Exception('Upload demorou mais que 2 minutos. Tente novamente.');
     } catch (e) {
-      // CORREÇÃO 2: O catch para SocketException é verificado condicionalmente.
-      // Isso evita o erro de compilação na web, onde o tipo SocketException não existe.
-      if (!kIsWeb && e is SocketException) {
+      if (!kIsWeb && e.runtimeType.toString() == 'SocketException') {
         Logger.error('DocumentUpload: Erro de conexão (SocketException)', error: e);
         throw Exception('Erro de conexão: Verifique sua internet e tente novamente.');
       }
@@ -152,7 +148,6 @@ class DocumentUploadService {
   }
 
   String _getFileExtension(String filePath) {
-    // Usando path.extension para mais segurança
     return path.extension(filePath).replaceAll('.', '').toLowerCase();
   }
 
