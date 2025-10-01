@@ -2,11 +2,13 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: unused_import
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+// ignore: depend_on_referenced_packages
 import 'package:path/path.dart' as path;
 import '../core/api_client.dart';
 import '../core/api_headers.dart';
@@ -163,3 +165,4 @@ class DocumentUploadService {
       default: return null;
     }
   }
+} // <- CORREÇÃO AQUI: Chave de fechamento da classe que estava faltando.
