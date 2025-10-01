@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: borracharia-api-e-webapp
+    env: python
+    pythonVersion: '3.10.1'
+    
+    # --- BUILD COMMAND - SEM MUDANÇAS ---
+    buildCommand: "pip install -r requirements.txt"
+
+    # --- START COMMAND - SEM MUDANÇAS ---
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT src.main:app"
+
+    # --- REMOÇÃO DO CONFLITO ---
+    # REMOVIDO: staticPublishPath (conflitava com Flask)
+    # O Flask agora gerencia todos os arquivos estáticos
+
+    # --- VARIÁVEIS DE AMBIENTE ---
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.1
+      - key: MONGO_URI
+        fromSecret: true
+      - key: REDIS_URL
+        fromSecret: true
+      - key: SECRET_KEY
+        fromSecret: true
+      - key: CLOUDINARY_CLOUD_NAME
+        fromSecret: true
+      - key: CLOUDINARY_API_KEY
+        fromSecret: true
+      - key: CLOUDINARY_API_SECRET
+        fromSecret: true
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        fromSecret: true
+      - key: FIREBASE_WEB_API_KEY
+        fromSecret: true

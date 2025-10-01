@@ -1,0 +1,30 @@
+# ARQUIVO NOVO: src/services/huggingface_api_service.py
+
+import requests
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+class HuggingFaceApiService:
+    def __init__(self):
+        self.api_token = os.getenv('HUGGINGFACE_API_TOKEN')
+        self.api_url = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
+        if not self.api_token:
+            raise ValueError("Variável de ambiente HUGGINGFACE_API_TOKEN não configurada.")
+        self.headers = {"Authorization": f"Bearer {self.api_token}"}
+
+    def transcribe(self, audio_file_path: str) -> str:
+        with open(audio_file_path, "rb") as f:
+            data = f.read()
+        
+        response = requests.post(self.api_url, headers=self.headers, data=data, timeout=60)
+        
+        if response.status_code != 200:
+            error_message = f"Erro na API do Hugging Face: {response.status_code} - {response.text}"
+            logger.error(error_message)
+            raise RuntimeError(error_message)
+            
+        result = response.json()
+        transcribed_text = result.get("text", "").strip()
+        return transcribed_text

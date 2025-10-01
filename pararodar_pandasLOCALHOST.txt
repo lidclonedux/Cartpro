@@ -1,0 +1,26 @@
+[27/9 18:51] lucas: Dps pra rodar esse aqui 
+
+
+
+# Ative o virtualenv
+source ~/pyenv_venv/bin/activate
+
+# Confirme que pip e python são do venv
+which python
+which pip
+which gunicorn  # provavelmente ainda não instalado, veja abaixo
+
+# Instale gunicorn dentro do venv
+pip install gunicorn
+
+# Rode o servidor com o gunicorn do venv
+python -m gunicorn --bind 0.0.0.0:8000 --workers 1 "src.main:app"
+[27/9 18:52] lucas: # Ative o virtualenv (se ainda não estiver)
+source ~/pyenv_venv/bin/activate
+
+# Instale Flask e outras libs do seu projeto
+pip install flask numpy pandas python-dateutil pytz tzdata six
+
+# Se tiver um requirements.txt no projeto, a forma mais completa:
+pip install -r requirements.txt
+[27/9 18:53] lucas: python -m gunicorn --bind 0.0.0.0:8000 --workers 1 "src.main:app"
