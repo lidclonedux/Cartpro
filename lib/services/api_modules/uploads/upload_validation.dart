@@ -7,7 +7,7 @@ import '../core/api_exceptions.dart';
 import 'package:vitrine_borracharia/utils/logger.dart';
 
 class UploadValidation {
-  // Constantes de validação (sem alterações)
+  // Constantes de validação
   static const int maxImageSize = 10 * 1024 * 1024; // 10MB
   static const int maxDocumentSize = 50 * 1024 * 1024; // 50MB
   static const int maxProofSize = 5 * 1024 * 1024; // 5MB
@@ -16,11 +16,11 @@ class UploadValidation {
   static const List<String> allowedDocumentExtensions = ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png'];
   static const List<String> allowedProofExtensions = ['jpg', 'jpeg', 'png', 'pdf'];
 
-  // --- MÉTODOS DE VALIDAÇÃO PRINCIPAIS (ADAPTADOS) ---
+  // --- MÉTODOS DE VALIDAÇÃO PRINCIPAIS ---
 
   /// Valida arquivo de imagem de produto (híbrido)
   static Future<void> validateProductImage({
-    File? file,
+    dynamic file,
     Uint8List? bytes,
     String? filename,
     String? productName,
@@ -46,7 +46,7 @@ class UploadValidation {
 
   /// Valida arquivo de documento (híbrido)
   static Future<void> validateDocument({
-    File? file,
+    dynamic file,
     Uint8List? bytes,
     String? filename,
     String? context,
@@ -72,7 +72,7 @@ class UploadValidation {
 
   /// Valida comprovante de pagamento (híbrido)
   static Future<void> validatePaymentProof({
-    File? file,
+    dynamic file,
     Uint8List? bytes,
     String? filename,
     String? orderId,
@@ -96,9 +96,9 @@ class UploadValidation {
     }
   }
 
-  // --- MÉTODOS DE VALIDAÇÃO INTERNOS (ADAPTADOS) ---
+  // --- MÉTODOS DE VALIDAÇÃO INTERNOS ---
 
-  /// Validação de tamanho do arquivo (recebe dados brutos)
+  /// Validação de tamanho do arquivo
   static void _validateFileSize(int fileSize, int maxSize, String fileType) {
     if (fileSize == 0) throw UploadException('Arquivo está vazio ou é inválido');
     if (fileSize > maxSize) {
@@ -126,7 +126,7 @@ class UploadValidation {
     if (!allowedProofExtensions.contains(extension)) throw UploadException('Extensão de comprovante não permitida: .$extension. Permitidas: ${allowedProofExtensions.join(', ')}', fileName: filename);
   }
 
-  // --- MÉTODOS AUXILIARES (ADAPTADOS E MANTIDOS) ---
+  // --- MÉTODOS AUXILIARES ---
 
   static String _getFileExtension(String filename) {
     final extension = path.extension(filename).replaceAll('.', '').toLowerCase();
@@ -146,8 +146,8 @@ class UploadValidation {
 
   /// Valida múltiplos arquivos (híbrido)
   static Future<void> validateMultipleFiles({
-    List<File>? files,
-    List<Map<String, dynamic>>? webFiles, // Ex: [{'bytes': Uint8List, 'name': 'file.jpg'}]
+    List<dynamic>? files,
+    List<Map<String, dynamic>>? webFiles,
     required String fileType,
     int? maxFiles,
     int? maxTotalSize,
@@ -163,10 +163,17 @@ class UploadValidation {
       if (maxTotalSize != null) {
         int totalSize = 0;
         if (files != null) {
-          for (final file in files) { totalSize += await file.length(); }
+          for (final file in files) {
+            if (!kIsWeb) {
+              final mobileFile = file as File;
+              totalSize += await mobileFile.length();
+            }
+          }
         }
         if (webFiles != null) {
-          for (final webFile in webFiles) { totalSize += (webFile['bytes'] as Uint8List).length; }
+          for (final webFile in webFiles) {
+            totalSize += (webFile['bytes'] as Uint8List).length;
+          }
         }
         if (totalSize > maxTotalSize) {
           final maxTotalMB = (maxTotalSize / (1024 * 1024)).toStringAsFixed(1);
@@ -195,7 +202,7 @@ class UploadValidation {
   }
 
   // Método auxiliar para a validação múltipla
-  static Future<void> _validateSingleFile({required String fileType, File? file, Uint8List? bytes, String? filename, required int index}) async {
+  static Future<void> _validateSingleFile({required String fileType, dynamic file, Uint8List? bytes, String? filename, required int index}) async {
     try {
       switch (fileType.toLowerCase()) {
         case 'image':
@@ -212,7 +219,13 @@ class UploadValidation {
           break;
       }
     } catch (e) {
-      final name = filename ?? (file != null ? _getFileName(file.path) : 'desconhecido');
+      String name = 'desconhecido';
+      if (filename != null) {
+        name = filename;
+      } else if (file != null && !kIsWeb) {
+        final mobileFile = file as File;
+        name = _getFileName(mobileFile.path);
+      }
       throw UploadException('Erro no arquivo ${index + 1} ($name): ${e.toString()}');
     }
   }
@@ -229,9 +242,9 @@ class UploadValidation {
     try { return allowedProofExtensions.contains(_getFileExtension(filename)); } catch (e) { return false; }
   }
 
-  /// Calcula tamanho recomendado para redimensionamento (híbrido)
+  /// Calcula tamanho recomendado para redimensionamento
   static Map<String, int> calculateRecommendedSize({int? fileSize, int? maxFileSize}) {
-    final size = fileSize ?? maxImageSize; // Usa um padrão se não for fornecido
+    final size = fileSize ?? maxImageSize;
     final maxSize = maxFileSize ?? maxImageSize;
     if (size <= maxSize * 0.1) return {'width': 800, 'height': 600, 'quality': 85};
     if (size <= maxSize * 0.5) return {'width': 1200, 'height': 900, 'quality': 90};
@@ -239,29 +252,48 @@ class UploadValidation {
   }
 
   /// Obtém informações detalhadas do arquivo (híbrido)
-  static Future<Map<String, dynamic>> getFileInfo({File? file, Uint8List? bytes, String? filename}) async {
+  static Future<Map<String, dynamic>> _getFileInfo({dynamic file, Uint8List? bytes, String? filename}) async {
     try {
       if (kIsWeb) {
         if (bytes == null || filename == null) throw ArgumentError('Para web, "bytes" e "filename" são necessários.');
         return {
-          'name': filename, 'extension': _getFileExtension(filename), 'size': bytes.length,
+          'filename': filename,
+          'name': filename,
+          'extension': _getFileExtension(filename),
+          'size': bytes.length,
           'size_mb': (bytes.length / (1024 * 1024)).toStringAsFixed(2),
-          'is_image': isValidImageFile(filename), 'is_document': isValidDocumentFile(filename), 'is_proof': isValidProofFile(filename),
+          'is_image': isValidImageFile(filename),
+          'is_document': isValidDocumentFile(filename),
+          'is_proof': isValidProofFile(filename),
         };
       } else {
         if (file == null) throw ArgumentError('Para mobile, "file" é necessário.');
-        if (!await file.exists()) throw UploadException('Arquivo não encontrado: ${file.path}');
-        final fileSize = await file.length();
+        final mobileFile = file as File;
+        if (!await mobileFile.exists()) throw UploadException('Arquivo não encontrado: ${mobileFile.path}');
+        final fileSize = await mobileFile.length();
+        final fileName = _getFileName(mobileFile.path);
         return {
-          'name': _getFileName(file.path), 'extension': _getFileExtension(file.path), 'size': fileSize,
-          'size_mb': (fileSize / (1024 * 1024)).toStringAsFixed(2), 'last_modified': (await file.lastModified()).toIso8601String(),
-          'path': file.path, 'is_image': isValidImageFile(file.path), 'is_document': isValidDocumentFile(file.path), 'is_proof': isValidProofFile(file.path),
+          'filename': fileName,
+          'name': fileName,
+          'extension': _getFileExtension(mobileFile.path),
+          'size': fileSize,
+          'size_mb': (fileSize / (1024 * 1024)).toStringAsFixed(2),
+          'last_modified': (await mobileFile.lastModified()).toIso8601String(),
+          'path': mobileFile.path,
+          'is_image': isValidImageFile(mobileFile.path),
+          'is_document': isValidDocumentFile(mobileFile.path),
+          'is_proof': isValidProofFile(mobileFile.path),
         };
       }
     } catch (e) {
       Logger.error('UploadValidation: Erro ao obter info do arquivo', error: e);
       return {'error': e.toString()};
     }
+  }
+
+  /// Obtém informações detalhadas do arquivo (público - híbrido)
+  static Future<Map<String, dynamic>> getFileInfo({dynamic file, Uint8List? bytes, String? filename}) async {
+    return _getFileInfo(file: file, bytes: bytes, filename: filename);
   }
 
   static String sanitizeFileName(String fileName) {
