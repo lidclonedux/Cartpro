@@ -53,14 +53,13 @@ class DocumentUploadService {
         if (file == null) {
           throw Exception('Erro interno: Arquivo de documento mobile ausente.');
         }
-        final mobileFile = file as File;
-        if (!await mobileFile.exists()) {
-          throw Exception('Arquivo não encontrado: ${mobileFile.path}');
+        if (!await file.exists()) {
+          throw Exception('Arquivo não encontrado: ${file.path}');
         }
-        fileSize = await mobileFile.length();
-        finalFilename = path.basename(mobileFile.path);
-        fileExtension = _getFileExtension(mobileFile.path);
-        Logger.info('DocumentUpload: Arquivo (Mobile): ${mobileFile.path}');
+        fileSize = await file.length();
+        finalFilename = path.basename(file.path);
+        fileExtension = _getFileExtension(file.path);
+        Logger.info('DocumentUpload: Arquivo (Mobile): ${file.path}');
       }
 
       Logger.info('DocumentUpload: Tamanho do documento: ${fileSize ~/ 1024}KB');
@@ -87,8 +86,7 @@ class DocumentUploadService {
         Logger.info('DocumentUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (file != null) {
         // --- MOBILE: Usa o stream do arquivo ---
-        final mobileFile = file as File;
-        final fileStream = http.ByteStream(mobileFile.openRead());
+        final fileStream = http.ByteStream(file.openRead());
         multipartFile = http.MultipartFile(
           'file',
           fileStream,
@@ -165,4 +163,3 @@ class DocumentUploadService {
       default: return null;
     }
   }
-}
