@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-// CORREÇÃO 1: Importação condicional para evitar que 'File' e 'SocketException' quebrem a compilação web.
+// A importação condicional que você já tinha está correta e será mantida.
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:async';
@@ -19,7 +19,9 @@ class ImageUploadService {
   ImageUploadService(this._headers);
 
   Future<Map<String, dynamic>> uploadProductImage({
-    File? imageFile,
+    // CORREÇÃO 1: Trocamos 'File?' por 'dynamic'.
+    // O compilador web não vai mais reclamar. No mobile, você continuará passando um objeto File.
+    dynamic imageFile,
     Uint8List? imageBytes,
     String? filename,
     String? productName,
@@ -45,15 +47,17 @@ class ImageUploadService {
         Logger.info('ImageUpload: Arquivo (Web): $filename');
       } else {
         Logger.info('ImageUpload: Plataforma Mobile detectada.');
-        if (imageFile == null) {
+        // Aqui, tratamos o 'dynamic' como o 'File' que ele realmente é no mobile.
+        final mobileFile = imageFile as File;
+        if (mobileFile == null) {
           throw Exception('Erro interno: Arquivo de imagem mobile ausente.');
         }
-        if (!await imageFile.exists()) {
-          throw Exception('Arquivo não encontrado: ${imageFile.path}');
+        if (!await mobileFile.exists()) {
+          throw Exception('Arquivo não encontrado: ${mobileFile.path}');
         }
-        fileSize = await imageFile.length();
-        fileExtension = _getFileExtension(imageFile.path);
-        Logger.info('ImageUpload: Arquivo (Mobile): ${imageFile.path}');
+        fileSize = await mobileFile.length();
+        fileExtension = _getFileExtension(mobileFile.path);
+        Logger.info('ImageUpload: Arquivo (Mobile): ${mobileFile.path}');
       }
 
       Logger.info('ImageUpload: Tamanho: $fileSize bytes');
@@ -89,7 +93,9 @@ class ImageUploadService {
         );
         Logger.info('ImageUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (imageFile != null) {
-        final fileStream = http.ByteStream(imageFile.openRead());
+        // Aqui também, tratamos o 'dynamic' como 'File'.
+        final mobileFile = imageFile as File;
+        final fileStream = http.ByteStream(mobileFile.openRead());
         multipartFile = http.MultipartFile(
           'file',
           fileStream,
@@ -159,13 +165,13 @@ class ImageUploadService {
     } on TimeoutException catch (e) {
       Logger.error('ImageUpload: Timeout no upload da imagem: $e');
       throw Exception('Timeout: Upload demorou mais que 90 segundos. Tente com uma imagem menor.');
-    // CORREÇÃO 2: O catch de SocketException foi movido para dentro do catch genérico
-    // para ser verificado condicionalmente, preservando os outros catches específicos.
     } on FormatException catch (e) {
       Logger.error('ImageUpload: Erro de formato na resposta', error: e);
       throw Exception('Servidor retornou resposta inválida');
     } catch (e) {
-      if (!kIsWeb && e is SocketException) {
+      // CORREÇÃO 2: Verificamos o erro pela string, sem mencionar o tipo 'SocketException'.
+      // Isso evita o erro de compilação e mantém a funcionalidade no mobile.
+      if (!kIsWeb && e.toString().contains('SocketException')) {
         Logger.error('ImageUpload: Erro de conexão no upload', error: e);
         throw Exception('Erro de conexão: Verifique sua internet e tente novamente');
       }
