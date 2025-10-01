@@ -44,7 +44,7 @@ class ImageUploadService {
         Logger.info('ImageUpload: Arquivo (Web): $filename');
       } else {
         Logger.info('ImageUpload: Plataforma Mobile detectada.');
-        final mobileFile = imageFile as File;
+        final mobileFile = file;
         if (mobileFile == null) {
           throw Exception('Erro interno: Arquivo de imagem mobile ausente.');
         }
@@ -89,7 +89,7 @@ class ImageUploadService {
         );
         Logger.info('ImageUpload: Arquivo (Web) adicionado à requisição via fromBytes.');
       } else if (imageFile != null) {
-        final mobileFile = imageFile as File;
+        final mobileFile = file;
         final fileStream = http.ByteStream(mobileFile.openRead());
         multipartFile = http.MultipartFile(
           'file',
